@@ -5,6 +5,8 @@ import aiohttp
 import json
 import os
 
+from ranks import getRankNameFromCareerRank
+
 # Enable intents (Members intent is mandatory for role manipulation)
 intents = discord.Intents.default()
 intents.message_content = True
@@ -22,7 +24,6 @@ DEFAULT_PLATFORM = "ea"
 # falls back to the guild's system channel if never set.
 UPDATE_CHANNEL_ID = None
 
-load_dotenv('secrets.env')
 
 def load_data():
     """Loads the linked player database."""
@@ -277,18 +278,19 @@ async def update_all_players():
             if stats is None:
                 continue
 
-            rank, rank_name = get_level_and_rank(stats)
+            rankValue, rank_name = get_level_and_rank(stats)
+            concise_rank_name = getRankNameFromCareerRank(rankValue)
 
             print(f"--- {member.display_name} ({name} / {platform}) ---")
-            print(f"Rank: {rank}")
-            print(f"Rank name: {rank_name}")
+            print(f"Rank: {rankValue}")
+            print(f"Rank name: {concise_rank_name}")
             print(f"Raw response: {json.dumps(stats)[:1000]}")  # trimmed, so you can spot other field names
 
-            await assign_rank_role(member, rank_name)
+            await assign_rank_role(member, concise_rank_name)
 
             if channel:
                 await channel.send(
-                    f"**{member.display_name}** (`{name}` / `{platform}`) — Rank: `{rank}` | Rank name: `{rank_name}`"
+                    f"**{member.display_name}** (`{name}` / `{platform}`) — Rank: `{rankValue}` | Rank name: `{concise_rank_name}`"
                 )
 
 
@@ -307,6 +309,9 @@ async def force_update_all(ctx):
 
 
 if __name__ == "__main__":
+
+    load_dotenv('secrets.env')
+
     token = os.getenv("DISCORD_TOKEN")
 
     if not token:
