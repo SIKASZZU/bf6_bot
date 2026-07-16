@@ -92,7 +92,7 @@ async def on_command_error(ctx, error):
     await ctx.send(f"❌ An unexpected error occurred: {error}")
 
 
-@bot.command()
+@bot.command(name='link')
 async def link(ctx, name: str, platform: str = DEFAULT_PLATFORM):
     """
     Links your Discord account to a game account.
@@ -198,8 +198,9 @@ def get_level_and_rank(stats: dict):
 
 
 async def get_or_create_role(guild: discord.Guild, rank_name: str):
-    """Finds a role matching rank_name, creating it if it doesn't exist."""
+    """Finds a role matching rank_name. """
     if not rank_name:
+        print(f"Failed to find rank_name: {rank_name}")
         return None
 
     role = discord.utils.get(guild.roles, name=rank_name)
@@ -307,6 +308,22 @@ async def force_update_all(ctx):
         await ctx.send(f"❌ An error occurred during the update: {e}")
         print(f"Manual update error: {e}")
 
+
+@bot.command(name="commands")
+async def display_commands(ctx):
+
+    """
+    Update this method manually.
+    Sends a message to channel containing all the commands
+    """
+
+    await ctx.send(f"\
+        All the commands:                       \n\
+        !link <name> [platform]                 \n\
+        !linkuser <@member> <name> [platform]   \n\
+        !updateall                              \n\
+        !setchannel                             \n\
+    ")
 
 if __name__ == "__main__":
 
