@@ -2,6 +2,7 @@ import os
 import json
 import aiohttp
 from discord.ext import commands, tasks
+import time
 
 from globals import *
 from ranks import getRankNameFromCareerRank
@@ -20,7 +21,6 @@ def save_data(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-
 def get_player_entry(data: dict, discord_id: str):
     """
     Returns {"name": ..., "platform": ...} for a linked discord id, or None.
@@ -34,12 +34,31 @@ def get_player_entry(data: dict, discord_id: str):
         return {"name": entry, "platform": DEFAULT_PLATFORM}
     return entry
 
+
+_last_command_time = 0
+REQUEST_INTERVAL_SECONDS = 5
+
+@bot.check
+async def global_rate_limit(ctx):
+    global _last_command_time
+    now = time.monotonic() # lol wtf
+
+    if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
+        # silently blocks the command from running
+        return False
+
+    _last_command_time = now
+    return True
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
+
+    synced = await bot.tree.sync()
+    print(f"Synced {len(synced)} command(s): {[c.name for c in synced]}")
+
     if not update_all_players.is_running():
         update_all_players.start()
-    print("Background updater task has started.")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -47,6 +66,14 @@ async def on_command_error(ctx, error):
     Catches errors from any command and prints a helpful usage message
     to the channel instead of letting the traceback go unseen in the console.
     """
+
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("⏳ Bot is busy, try again in a moment.")
+        return
+
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"⏳ Slow down! Try again in {error.retry_after:.1f}s.")
+        return
 
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(
@@ -128,70 +155,103 @@ def get_level_and_rank(stats: dict):
     return rank, rank_name
 
 
-async def get_or_create_role(guild: discord.Guild, rank_name: str):
-    """Finds a role matching rank_name. """
+async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextChannel = None):
+    """Finds a role matching rank_name."""
     if not rank_name:
         print(f"Failed to find rank_name: {rank_name}")
         return None
 
     role = discord.utils.get(guild.roles, name=rank_name)
     if role is None:
-        try:
-            role = await guild.create_role(name=rank_name, reason="Auto-created rank role")
-            print(f"Created new role: {rank_name}")
-        except discord.Forbidden:
-            print(f"Missing permissions to create role: {rank_name}")
-            return None
-        except discord.HTTPException as e:
-            print(f"Failed to create role {rank_name}: {e}")
-            return None
-
+        print('Missing role!')
+        if channel:
+            await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}")
     return role
 
 
-async def assign_rank_role(member: discord.Member, rank_name: str):
+async def assign_rank_role(member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
         return
 
     guild = member.guild
-    role = await get_or_create_role(guild, rank_name)
+    role = await get_role(guild, rank_name, channel)
+
     if role is None:
         return
 
     if role.position >= guild.me.top_role.position:
         print(f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
+        if channel:
+            await channel.send(f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
         return
 
     try:
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync")
             print(f"Assigned {rank_name} to {member.display_name}")
+            if channel:
+                await channel.send(f"✅Assigned `{rank_name}` to `{member.display_name}`")
+
     except discord.Forbidden:
         print(f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
+
     except discord.HTTPException as e:
         print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
 
+async def update_player(member: discord.Member, report_channel: discord.TextChannel = None):
+    " Call update on player using their discord's name"
+    await bot.wait_until_ready()
 
-@tasks.loop(hours=AUTO_UPDATE_TIMER)
-async def update_all_players():
+    data = load_data()
+
+    # fix this
+    channel = report_channel
+    if channel is None and UPDATE_CHANNEL_ID:
+        channel = bot.get_channel(UPDATE_CHANNEL_ID)
+
+    async with aiohttp.ClientSession() as session:
+        if member.bot:
+            print(f"Skipping {member.display_name}: no game account linked (!link needed)")
+            return
+
+        entry = get_player_entry(data, str(member.id))
+        if not entry:
+            print(f"Skipping {member.display_name}: no game account linked (!link needed)")
+            return
+
+        name = entry["name"]
+        platform = entry.get("platform", DEFAULT_PLATFORM)
+
+        stats = await fetch_player_stats(session, name, platform)
+        if stats is None:
+            return
+
+        rankValue, _ = get_level_and_rank(stats)
+        concise_rank_name = getRankNameFromCareerRank(rankValue)
+
+        print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
+        await assign_rank_role(member, concise_rank_name, channel)
+
+@tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
+async def update_all_players(report_channel: discord.TextChannel = None):
     """
-    Runs every 24h (and once immediately on startup, since tasks.loop fires
-    right away on .start()). Walks every member currently in the guild -
-    linked or not - and only skips the ones who haven't run !link yet.
-    This means a newly-linked member gets picked up on the very next pass,
-    no restart needed.
+    Runs every {AUTO_UPDATE_TIMER_HOURS}h automatically (falls back to
+    UPDATE_CHANNEL_ID / guild system channel), or can be called manually
+    with report_channel=ctx.channel to report back wherever it was triggered from.
     """
     await bot.wait_until_ready()
 
-    guild = bot.guilds[0]  # single-server assumption; loop over bot.guilds for multi-server
+    guild = bot.guilds[0]
     data = load_data()
 
-    channel = None
-    if UPDATE_CHANNEL_ID:
+    # fix this
+    channel = report_channel
+    if channel is None and UPDATE_CHANNEL_ID:
         channel = bot.get_channel(UPDATE_CHANNEL_ID)
+
     if channel is None:
-        channel = guild.system_channel  # may be None if not configured
+        channel = guild.system_channel  # still may be None — every .send below is guarded
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
@@ -210,17 +270,8 @@ async def update_all_players():
             if stats is None:
                 continue
 
-            rankValue, rank_name = get_level_and_rank(stats)
+            rankValue, _ = get_level_and_rank(stats)
             concise_rank_name = getRankNameFromCareerRank(rankValue)
 
-            print(f"--- {member.display_name} ({name} / {platform}) ---")
-            print(f"Rank: {rankValue}")
-            print(f"Rank name: {concise_rank_name}")
-            print(f"Raw response: {json.dumps(stats)[:1000]}")  # trimmed, so you can spot other field names
-
-            await assign_rank_role(member, concise_rank_name)
-
-            if channel:
-                await channel.send(
-                    f"**{member.display_name}** (`{name}` / `{platform}`) — Rank: `{rankValue}` | Rank name: `{concise_rank_name}`"
-                )
+            print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
+            await assign_rank_role(member, concise_rank_name, channel)
