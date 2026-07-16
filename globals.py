@@ -20,4 +20,4 @@ DEFAULT_PLATFORM = "ea"
 UPDATE_CHANNEL_ID = None
 
 # Channel the 24h loop posts results into.
-REFRESH_ALL_AFTER : int = 60 * 60 * 24
+AUTO_UPDATE_TIMER : int = 60 * 60 * 24

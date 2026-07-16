@@ -173,7 +173,7 @@ async def assign_rank_role(member: discord.Member, rank_name: str):
         print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
 
 
-@tasks.loop(hours=REFRESH_ALL_AFTER)
+@tasks.loop(hours=AUTO_UPDATE_TIMER)
 async def update_all_players():
     """
     Runs every 24h (and once immediately on startup, since tasks.loop fires
