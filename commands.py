@@ -21,7 +21,7 @@ async def link(ctx, name: str, platform: str = DEFAULT_PLATFORM):
     data[str(ctx.author.id)] = {"name": name, "platform": platform}
     save_data(data)
 
-    await ctx.send(f"Successfully linked your Discord account to **{name}** on platform `{platform}`! I will track your stats automatically.")
+    await ctx.send(f"✅ Successfully linked your Discord account to **{name}** on platform `{platform}`! I will track your stats automatically.")
 
 @bot.command(name="linkuser")
 @commands.has_permissions(administrator=True)
@@ -41,7 +41,7 @@ async def link_user(ctx, member: discord.Member, name: str, platform: str = DEFA
     data[str(member.id)] = {"name": name, "platform": platform}
     save_data(data)
 
-    await ctx.send(f"Linked {member.mention} to **{name}** on platform `{platform}`!")
+    await ctx.send(f"✅ Linked {member.mention} to **{name}** on platform `{platform}`!")
 
 @bot.command(name="setchannel")
 @commands.has_permissions(administrator=True)

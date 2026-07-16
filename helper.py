@@ -34,7 +34,6 @@ def get_player_entry(data: dict, discord_id: str):
         return {"name": entry, "platform": DEFAULT_PLATFORM}
     return entry
 
-
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
@@ -42,13 +41,13 @@ async def on_ready():
         update_all_players.start()
     print("Background updater task has started.")
 
-
 @bot.event
 async def on_command_error(ctx, error):
     """
     Catches errors from any command and prints a helpful usage message
     to the channel instead of letting the traceback go unseen in the console.
     """
+
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(
             f"❌ Missing argument: `{error.param.name}`\n"
