@@ -73,11 +73,11 @@ async def force_update_member(ctx, member: discord.Member):
 @commands.has_permissions(administrator=True)
 async def force_update_all(ctx):
     """Manually forces the background update logic to run immediately via chat."""
-    await ctx.send("🔄 Manually initiating a global player stats update...")
+    await ctx.send("🔄 Automatic update in progress... ")
 
     try:
         await update_all_players(report_channel=ctx.channel)
-        await ctx.send("✅ Global player stats update completed successfully!")
+        await ctx.send("✅ Automatic update complete!")
 
     except Exception as e:
         await ctx.send(f"❌ An error occurred during the update: {e}")
