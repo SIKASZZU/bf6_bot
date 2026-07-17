@@ -18,7 +18,7 @@ async def link(ctx, *, name: str):
         return
 
     data = load_data()
-    data[str(ctx.author.id)] = {"name": name, "platform": platform}
+    data[str(ctx.guild.id)][str(ctx.author.id)] = {"name": name, "platform": platform}
     save_data(data)
 
     await ctx.send(f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
@@ -51,8 +51,7 @@ async def link_user(ctx, member: discord.Member, *, name: str, ):
         return
 
     data = load_data()
-
-    data[str(member.id)] = {"name": name, "platform": platform} # [ctx.guild.id]
+    data[str(ctx.guild.id)][str(member.id)] = {"name": name, "platform": platform}
     save_data(data)
 
     await ctx.send(f"✅ Linked {member.mention} to `{name}` on platform `{platform}`!")
@@ -61,11 +60,9 @@ async def link_user(ctx, member: discord.Member, *, name: str, ):
 @commands.has_permissions(administrator=True)
 async def set_channel(ctx):
     """Sets the current channel as the target for the 24h stats report."""
-    global UPDATE_CHANNEL_ID
-    UPDATE_CHANNEL_ID = ctx.channel.id
 
     config = load_config()
-    config["channel_id"] = UPDATE_CHANNEL_ID
+    config[str(ctx.guild.id)]["channel_id"] = ctx.channel.id
     save_config(config)
 
     await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {AUTO_UPDATE_TIMER_HOURS}h stats updates.")

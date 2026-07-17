@@ -20,13 +20,13 @@ def save_data(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-def get_player_entry(data: dict, discord_id: str):
+def get_player_entry(data: dict, guild: int, discord_id: int):
     """
     Returns {"name": ..., "platform": ...} for a linked discord id, or None.
     Old entries were plain strings (just the EA name) - normalize those to
     the new dict shape so both formats keep working.
     """
-    entry = data.get(discord_id)
+    entry = data.get(str(guild.id), {}).get(str(discord_id))
     if entry is None:
         return None
     if isinstance(entry, str):
@@ -100,8 +100,6 @@ async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
     api_url = f"https://api.gametools.network/bf6/profile/?name={name}&platform={platform}"
 
-    print(f"api_url for {name} ({platform}): {api_url}")
-
     async with session.get(api_url) as response:
         if response.status == 404:
             print(f"[404] Player not found: {name} on platform {platform}")
@@ -168,12 +166,14 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
 async def assign_rank_role(member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
+        print('Returning! rank_name is None.')
         return
 
     guild = member.guild
-    role = await get_role(guild, rank_name, channel)
 
+    role = await get_role(guild, rank_name, channel)
     if role is None:
+        print('Returning! Role is None.')
         return
 
     if role.position >= guild.me.top_role.position:
@@ -195,11 +195,11 @@ async def assign_rank_role(member: discord.Member, rank_name: str, channel: disc
     except discord.HTTPException as e:
         print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
 
-async def _update_member(member: discord.Member, session, channel):
+async def _update_member(guild: discord.Guild, member: discord.Member, session, channel):
     if member.bot:
         return
 
-    entry = get_player_entry(load_data(), str(member.id))
+    entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
         print(f"Skipping {member.display_name}: no game account linked (!link needed)")
         return
@@ -217,39 +217,34 @@ async def _update_member(member: discord.Member, session, channel):
     print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
     await assign_rank_role(member, concise_rank_name, channel)
 
-async def update_player(member: discord.Member, report_channel: discord.TextChannel = None):
+async def update_player(guild: discord.Guild, member: discord.Member, report_channel: discord.TextChannel = None):
     """Call update on player using their discord's name"""
     await bot.wait_until_ready()
 
-    data = load_data()
+    CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
 
-    # fix this
     channel = report_channel
-    if channel is None and UPDATE_CHANNEL_ID:
-        channel = bot.get_channel(UPDATE_CHANNEL_ID)
+    if channel is None and CHANNEL_ID:
+        channel = bot.get_channel(CHANNEL_ID)
 
     async with aiohttp.ClientSession() as session:
-        _update_member(member, session, channel)
+        _update_member(guild, member, session, channel)
 
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None):
-    """
-    Runs every {AUTO_UPDATE_TIMER_HOURS}h automatically (falls back to
-    UPDATE_CHANNEL_ID / guild system channel), or can be called manually
-    with report_channel=ctx.channel to report back wherever it was triggered from.
-    """
     await bot.wait_until_ready()
 
     guild = bot.guilds[0]
+    CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
 
     # fix this
     channel = report_channel
-    if channel is None and UPDATE_CHANNEL_ID:
-        channel = bot.get_channel(UPDATE_CHANNEL_ID)
+    if channel is None and CHANNEL_ID:
+        channel = bot.get_channel(CHANNEL_ID)
 
     if channel is None:
         channel = guild.system_channel  # still may be None — every .send below is guarded
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
-            await _update_member(member, session, channel)
+            await _update_member(guild, member, session, channel)
