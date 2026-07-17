@@ -67,10 +67,11 @@ async def on_command_error(ctx, error):
     to the channel instead of letting the traceback go unseen in the console.
     """
 
-    if isinstance(error, commands.CheckFailure):
-        await ctx.send("⏳ Bot is busy, try again in a moment.")
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You don't have permission to use this command.")
         return
 
+    # arva ara kuidas muuta retry_after v22rtus
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.send(f"⏳ Slow down! Try again in {error.retry_after:.1f}s.")
         return
@@ -89,12 +90,9 @@ async def on_command_error(ctx, error):
         )
         return
 
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ You don't have permission to use this command.")
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("⏳ Bot is busy, try again in a moment.")
         return
-
-    if isinstance(error, commands.CommandNotFound):
-        return  # unknown command, ignore silently
 
     print(f"Unhandled error in command '{ctx.command}': {error}")
     await ctx.send(f"❌ An unexpected error occurred: {error}")

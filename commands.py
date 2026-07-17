@@ -37,7 +37,8 @@ async def link_user(ctx, member: discord.Member, *, name: str, ):
         return
 
     data = load_data()
-    data[str(member.id)] = {"name": name, "platform": platform}
+
+    data[str(member.id)] = {"name": name, "platform": platform} # [ctx.guild.id]
     save_data(data)
 
     await ctx.send(f"✅ Linked {member.mention} to `{name}` on platform `{platform}`!")
