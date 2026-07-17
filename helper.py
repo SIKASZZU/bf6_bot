@@ -17,6 +17,10 @@ def load_data():
 
 def save_data(data):
     """Saves the player database to a JSON file."""
+    if not data:
+        print('Returning! No data provided for save_data.')
+        return
+
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -95,6 +99,41 @@ async def on_command_error(ctx, error):
     print(f"Unhandled error in command '{ctx.command}': {error}")
     await ctx.send(f"❌ An unexpected error occurred: {error}")
 
+@bot.event
+async def on_guild_join(guild):
+    config = load_config()
+    server_key = str(guild.id)
+    
+    if server_key not in config:
+        config[server_key] = {
+            "channel_id": None,
+            "update_interval": 1
+        }
+        save_config(config)
+        print(f"Initialized default configuration for server: {guild.name} ({server_key})")
+
+    data = load_data()
+    if server_key not in config:
+        data[server_key] = {}
+        save_data(data)
+        print(f"Initialized default configuration for server: {guild.name} ({server_key})")
+    
+
+@bot.event
+async def on_guild_remove(guild):
+    config = load_config()
+    server_key = str(guild.id)
+    
+    if server_key in config:
+        del config[server_key]
+        save_config(config)
+        print(f"Removed configuration for server: {guild.name} ({server_key})")
+    
+    data = load_data()
+    if server_key in data:
+        del data[server_key]
+        save_data(data)
+        print(f"Removed saved data for server: {guild.name} ({server_key})")
 
 async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""

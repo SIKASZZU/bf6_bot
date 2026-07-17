@@ -65,7 +65,23 @@ async def set_channel(ctx):
     config[str(ctx.guild.id)]["channel_id"] = ctx.channel.id
     save_config(config)
 
-    await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {AUTO_UPDATE_TIMER_HOURS}h stats updates.")
+    await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
+
+@bot.command(name="set-update-interval")
+@commands.has_permissions(administrator=True)
+async def set_update_interval(ctx, hours: int):
+    """Sets the current channel as the target for the 24h stats report."""
+
+    if (hours < 1):
+        print(f'Somebody tried to set hours: {hours}')
+        ctx.send(f"Try again! Only natural numbers including from 1 and above can be set as interval.")
+        return
+
+    config = load_config()
+    config[str(ctx.guild.id)]["update_interval"] = hours
+    save_config(config)
+
+    await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
 
 @bot.command(name="update-user")
 @commands.has_permissions(administrator=True)
@@ -106,6 +122,7 @@ async def display_commands(ctx):
         --- Administrator only commands! ---    \n\
         !link-user <@member> <name>             \n\
         !set-channel                            \n\
+        !set-update-interval <hours>            \n\
         !update-user <@member>                  \n\
         !update-all                             \n\
         "
@@ -115,7 +132,7 @@ async def display_commands(ctx):
 @bot.command(name='info')
 async def display_info(ctx):
     """ Sends a message to channel containing information about and use cases of bot."""
-    await ctx.send(f"Bot assigns roles based on Bf6 career rank! Use !set-channel to assign for bot spam. Firstly administrator has to link member to their {DEFAULT_PLATFORM} account using !commands. Updating automatically every {AUTO_UPDATE_TIMER_HOURS}h.")
+    await ctx.send(f"Bot assigns roles based on Bf6 career rank! Use !set-channel to assign for bot spam. Firstly administrator has to link member to their {DEFAULT_PLATFORM} account using !commands. Updating automatically every {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h.")
 
 @bot.command(name='supported-platforms')
 async def display_supported_playforms(ctx):
