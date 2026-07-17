@@ -23,7 +23,7 @@ UPDATE_CHANNEL_ID = None
 
 # Channel the 24h loop posts results into.
 
-AUTO_UPDATE_TIMER_HOURS : int = 24
+AUTO_UPDATE_TIMER_HOURS : int = 1
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
