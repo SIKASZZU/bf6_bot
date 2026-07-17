@@ -29,7 +29,7 @@ async def force_update(ctx):
     await ctx.send("🔄 Updating...")
 
     try:
-        await update_player(ctx.author, report_channel=ctx.channel)
+        await update_player(ctx.guild, ctx.author, report_channel=ctx.channel)
         await ctx.send("✅ Player stats update completed successfully!")
 
     except Exception as e:
@@ -90,7 +90,7 @@ async def force_update_member(ctx, member: discord.Member):
     await ctx.send("🔄 Looking for update on player...")
 
     try:
-        await update_player(member, report_channel=ctx.channel)
+        await update_player(ctx.guild, member, report_channel=ctx.channel)
         # await update_all_players(report_channel=ctx.channel)
         await ctx.send("✅ Player stats update completed successfully!")
 
