@@ -24,13 +24,13 @@ def save_data(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-def get_player_entry(data: dict, guild: int, discord_id: int):
+def get_player_entry(data: dict, guild_id: int, discord_id: int):
     """
     Returns {"name": ..., "platform": ...} for a linked discord id, or None.
     Old entries were plain strings (just the EA name) - normalize those to
     the new dict shape so both formats keep working.
     """
-    entry = data.get(str(guild.id), {}).get(str(discord_id))
+    entry = data.get(str(guild_id), {}).get(str(discord_id))
     if entry is None:
         return None
     if isinstance(entry, str):

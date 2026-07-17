@@ -18,7 +18,7 @@ async def link(ctx, *, name: str):
         return
 
     data = load_data()
-    data[str(ctx.guild.id)][str(ctx.author.id)] = {"name": name, "platform": platform}
+    data.setdefault(str(ctx.guild.id), {})[str(ctx.author.id)] = {"name": name, "platform": platform}
     save_data(data)
 
     await ctx.send(f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
@@ -51,7 +51,7 @@ async def link_user(ctx, member: discord.Member, *, name: str, ):
         return
 
     data = load_data()
-    data[str(ctx.guild.id)][str(member.id)] = {"name": name, "platform": platform}
+    data.setdefault(str(ctx.guild.id), {})[str(member.id)] = {"name": name, "platform": platform}
     save_data(data)
 
     await ctx.send(f"✅ Linked {member.mention} to `{name}` on platform `{platform}`!")
@@ -62,7 +62,7 @@ async def set_channel(ctx):
     """Sets the current channel as the target for the 24h stats report."""
 
     config = load_config()
-    config[str(ctx.guild.id)]["channel_id"] = ctx.channel.id
+    config.setdefault(str(ctx.guild.id), {})["channel_id"] = ctx.channel.id
     save_config(config)
 
     await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
@@ -78,7 +78,7 @@ async def set_update_interval(ctx, hours: int):
         return
 
     config = load_config()
-    config[str(ctx.guild.id)]["update_interval"] = hours
+    config.setdefault(str(ctx.guild.id), {})['update_interval'] = hours
     save_config(config)
 
     await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
