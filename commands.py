@@ -23,6 +23,20 @@ async def link(ctx, *, name: str):
 
     await ctx.send(f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
 
+@bot.command(name="update")
+async def force_update(ctx):
+    """Manually forces update on member. """
+    await ctx.send("🔄 Updating...")
+
+    try:
+        await update_player(ctx.author, report_channel=ctx.channel)
+        await ctx.send("✅ Player stats update completed successfully!")
+
+    except Exception as e:
+        await ctx.send(f"❌ An error occurred during the update: {e}")
+        print(f"Manual update error: {e}")
+
+
 @bot.command(name="link-user")
 @commands.has_permissions(administrator=True)
 async def link_user(ctx, member: discord.Member, *, name: str, ):
@@ -56,7 +70,8 @@ async def set_channel(ctx):
 
     await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {AUTO_UPDATE_TIMER_HOURS}h stats updates.")
 
-@bot.command(name="update")
+@bot.command(name="update-user")
+@commands.has_permissions(administrator=True)
 async def force_update_member(ctx, member: discord.Member):
     """Manually forces update on member. """
     await ctx.send("🔄 Looking for update on player...")
@@ -89,10 +104,13 @@ async def display_commands(ctx):
     await ctx.send(f"\
         All the commands:                       \n\
         !info                                   \n\
-        !set-channel                             \n\
-        !link <name>                 \n\
-        !link-user <@member> <name>  \n\
-        !update-all                              \n\
+        !link <name>                            \n\
+        !update                                 \n\
+        --- Administrator only commands! ---    \n\
+        !link-user <@member> <name>             \n\
+        !set-channel                            \n\
+        !update-user <@member>                  \n\
+        !update-all                             \n\
         "
         # !supported-platforms                    \n\
     )

@@ -15,7 +15,6 @@ def load_data():
             return json.load(f)
     return {}
 
-
 def save_data(data):
     """Saves the player database to a JSON file."""
     with open(DB_FILE, "w") as f:
@@ -33,7 +32,6 @@ def get_player_entry(data: dict, discord_id: str):
     if isinstance(entry, str):
         return {"name": entry, "platform": DEFAULT_PLATFORM}
     return entry
-
 
 _last_command_time = 0
 REQUEST_INTERVAL_SECONDS = 5
@@ -197,8 +195,30 @@ async def assign_rank_role(member: discord.Member, rank_name: str, channel: disc
     except discord.HTTPException as e:
         print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
 
+async def _update_member(member: discord.Member, session, channel):
+    if member.bot:
+        return
+
+    entry = get_player_entry(load_data(), str(member.id))
+    if not entry:
+        print(f"Skipping {member.display_name}: no game account linked (!link needed)")
+        return
+
+    name = entry["name"]
+    platform = entry.get("platform", DEFAULT_PLATFORM)
+
+    stats = await fetch_player_stats(session, name, platform)
+    if stats is None:
+        return
+
+    rankValue, _ = get_level_and_rank(stats)
+    concise_rank_name = getRankNameFromCareerRank(rankValue)
+
+    print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
+    await assign_rank_role(member, concise_rank_name, channel)
+
 async def update_player(member: discord.Member, report_channel: discord.TextChannel = None):
-    " Call update on player using their discord's name"
+    """Call update on player using their discord's name"""
     await bot.wait_until_ready()
 
     data = load_data()
@@ -209,27 +229,7 @@ async def update_player(member: discord.Member, report_channel: discord.TextChan
         channel = bot.get_channel(UPDATE_CHANNEL_ID)
 
     async with aiohttp.ClientSession() as session:
-        if member.bot:
-            print(f"Skipping {member.display_name}: no game account linked (!link needed)")
-            return
-
-        entry = get_player_entry(data, str(member.id))
-        if not entry:
-            print(f"Skipping {member.display_name}: no game account linked (!link needed)")
-            return
-
-        name = entry["name"]
-        platform = entry.get("platform", DEFAULT_PLATFORM)
-
-        stats = await fetch_player_stats(session, name, platform)
-        if stats is None:
-            return
-
-        rankValue, _ = get_level_and_rank(stats)
-        concise_rank_name = getRankNameFromCareerRank(rankValue)
-
-        print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
-        await assign_rank_role(member, concise_rank_name, channel)
+        _update_member(member, session, channel)
 
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None):
@@ -241,7 +241,6 @@ async def update_all_players(report_channel: discord.TextChannel = None):
     await bot.wait_until_ready()
 
     guild = bot.guilds[0]
-    data = load_data()
 
     # fix this
     channel = report_channel
@@ -253,23 +252,4 @@ async def update_all_players(report_channel: discord.TextChannel = None):
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
-            if member.bot:
-                continue
-
-            entry = get_player_entry(data, str(member.id))
-            if not entry:
-                print(f"Skipping {member.display_name}: no game account linked (!link needed)")
-                continue
-
-            name = entry["name"]
-            platform = entry.get("platform", DEFAULT_PLATFORM)
-
-            stats = await fetch_player_stats(session, name, platform)
-            if stats is None:
-                continue
-
-            rankValue, _ = get_level_and_rank(stats)
-            concise_rank_name = getRankNameFromCareerRank(rankValue)
-
-            print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
-            await assign_rank_role(member, concise_rank_name, channel)
+            await _update_member(member, session, channel)
