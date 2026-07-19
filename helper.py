@@ -212,7 +212,17 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
         print(f"Failed to find rank_name: {rank_name}")
         return None
 
-    role = discord.utils.get(guild.roles, name=rank_name)
+    if hasattr(rank_name, "name") and not isinstance(rank_name, str):
+        return rank_name
+
+    if isinstance(rank_name, int):
+        return guild.get_role(rank_name)
+
+    if isinstance(rank_name, str):
+        role = discord.utils.get(guild.roles, name=rank_name)
+    else:
+        role = None
+
     if role is None:
         print('Missing role!')
         if channel:
@@ -223,7 +233,6 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
     print('Removing role method called...')
 
     current_role_names = {role.name for role in member.roles}
-    print(current_role_names)
     for role_name in get_role_dict().keys():
         if role_name not in current_role_names:
             continue
@@ -231,7 +240,11 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
             continue
 
         role_cls = await get_role(guild, role_name)
-        if role_cls is None:
+        if isinstance(role_cls, str):
+            role_cls = discord.utils.get(guild.roles, name=role_cls)
+
+        if role_cls is None or (not hasattr(role_cls, "name") and not isinstance(role_cls, str)):
+            print(f'Returning! role_cls is not a valid role object: {role_cls!r}')
             continue
 
         print(f'Removing {role_name} from {member.display_name}')
@@ -320,6 +333,7 @@ async def update_all_players(report_channel: discord.TextChannel = None):
 
     print(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
 
+    # TODO: this seems weird? How can it assure that first index is THE server
     guild = bot.guilds[0]
     CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
 
