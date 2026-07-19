@@ -13,6 +13,70 @@ async def send_interaction_message(interaction: discord.Interaction, content: st
     else:
         await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
 
+def _get_tree_commands():
+    tree_commands = getattr(bot.tree, 'get_commands', None)
+    if callable(tree_commands):
+        try:
+            return list(tree_commands())
+        except TypeError:
+            return []
+    return list(getattr(bot.tree, 'commands', []))
+
+def _build_commands_help_message():
+    lines = ["**All commands:**"]
+    admin_lines = ["**Administrator only:**"]
+    seen_names = set()
+
+    for cmd in list(bot.commands) + _get_tree_commands():
+        if getattr(cmd, 'hidden', False):
+            continue
+
+        name = getattr(cmd, 'name', None)
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+
+        is_admin = any(
+            getattr(check, '__qualname__', '').startswith('has_permissions')
+            for check in getattr(cmd, 'checks', [])
+        )
+
+        prefix = '!' if isinstance(cmd, commands.Command) else '/'
+        line = f"{prefix}{name}"
+
+        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None)
+        if help_text:
+            line += f" — {help_text}"
+
+        if is_admin:
+            admin_lines.append(line)
+        else:
+            lines.append(line)
+
+    message = "\n".join(lines)
+    if admin_lines:
+        message += "\n\n" + "\n".join(admin_lines)
+    return message
+
+def _build_links_message(guild_id, data: dict) -> str:
+    guild_key = str(guild_id)
+    server_data = data.get(guild_key, {})
+
+    if not server_data:
+        return "No linked accounts found for this server in the database."
+
+    lines = [f"Linked accounts for this server:"]
+    for discord_id, entry in server_data.items():
+        if isinstance(entry, dict):
+            name = entry.get('name', 'unknown')
+            platform = entry.get('platform', DEFAULT_PLATFORM)
+        else:
+            name = entry
+            platform = DEFAULT_PLATFORM
+
+        lines.append(f"- {discord_id}: {name} ({platform})")
+
+    return "\n".join(lines)
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
 @app_commands.describe(
@@ -131,30 +195,12 @@ async def set_update_interval(ctx, hours: int):
 
 @bot.command(name="commands")
 async def display_commands(ctx):
-    lines = ["**All commands:**"]
-    admin_lines = ["**Administrator only:**"]
+    await ctx.send(_build_commands_help_message())
 
-    for cmd in bot.commands:
-        if cmd.hidden:
-            continue
-
-        # figure out if it's admin-only by checking its checks
-        is_admin = any(
-            getattr(check, '__qualname__', '').startswith('has_permissions')
-            for check in cmd.checks
-        )
-
-        line = f"!{cmd.name}"
-        if cmd.help:
-            line += f" — {cmd.help}"
-
-        if is_admin:
-            admin_lines.append(line)
-        else:
-            lines.append(line)
-
-    message = "\n".join(lines) + "\n\n" + "\n".join(admin_lines)
-    await ctx.send(message)
+@bot.command(name="links", description=f'Have all the links be displayed.')
+async def display_links(ctx):
+    data = load_data()
+    await ctx.send(_build_links_message(ctx.guild.id, data))
 
 @bot.command(name='info')
 async def display_info(ctx):
