@@ -1,7 +1,9 @@
 import discord
-import os
 import json
+import sqlite3
+import os
 from discord.ext import commands
+
 
 # Enable intents (Members intent is mandatory for role manipulation)
 intents = discord.Intents.default()
@@ -10,25 +12,45 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-DB_FILE = 'player_data.json'
-CONFIG_FILE = 'config.json'
+file_folder = os.getenv('DB_FOLDER', './data/')
+os.makedirs(file_folder, exist_ok=True)
+
+DB_PATH         = os.path.join(file_folder, 'main.db')
+DB_DATA_FILE    = 'data'
+DB_CONFIG_FILE  = 'config'
 
 VALID_PLATFORMS = {'EA'}
 DEFAULT_PLATFORM = 'EA'
 
-# Channel the 24h loop posts results into.
-
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+def get_conn():
 
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(f'''
+        CREATE TABLE IF NOT EXISTS {DB_CONFIG_FILE} (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    return conn
+
+def load_config():
+    conn = get_conn()
+    rows = conn.execute(f'SELECT key, value FROM {DB_DATA_FILE}').fetchall()
+    conn.close()
+    return {key: json.loads(value) for key, value in rows}
 
 def save_config(config: dict):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
+    if not config:
+        print('Returning! No config provided for save_config.')
+        return
 
-
+    conn = get_conn()
+    for key, value in config.items():
+        conn.execute(
+            f'INSERT OR REPLACE INTO {DB_CONFIG_FILE} (key, value) VALUES (?, ?)',
+            (key, json.dumps(value))
+        )
+    conn.commit()
+    conn.close()

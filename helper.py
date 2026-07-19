@@ -1,28 +1,44 @@
-import os
 import json
 import aiohttp
-from discord.ext import commands, tasks
 import time
+import sqlite3
+from discord.ext import commands, tasks
 
 from globals import *
 from ranks import getRankNameFromCareerRank
 
 
+def get_conn():
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(f'''
+        CREATE TABLE IF NOT EXISTS {DB_DATA_FILE} (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+
+    return conn
+
 def load_data():
-    """Loads the linked player database."""
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    conn = get_conn()
+    rows = conn.execute(f'SELECT key, value FROM {DB_DATA_FILE}').fetchall()
+    conn.close()
+    return {key: json.loads(value) for key, value in rows}
 
 def save_data(data):
-    """Saves the player database to a JSON file."""
     if not data:
         print('Returning! No data provided for save_data.')
         return
 
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    conn = get_conn()
+    for key, value in data.items():
+        conn.execute(
+            f'INSERT OR REPLACE INTO {DB_DATA_FILE} (key, value) VALUES (?, ?)',
+            (key, json.dumps(value))
+        )
+    conn.commit()
+    conn.close()
 
 def get_player_entry(data: dict, guild_id: int, discord_id: int):
     """
@@ -38,7 +54,7 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
     return entry
 
 _last_command_time = 0
-REQUEST_INTERVAL_SECONDS = 5
+REQUEST_INTERVAL_SECONDS = 2
 
 @bot.check
 async def global_rate_limit(ctx):
