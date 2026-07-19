@@ -155,9 +155,9 @@ async def on_guild_remove(guild):
 
 async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
-    api_url = f"https://api.gametools.network/bf6/profile/?name={name}&platform={platform}"
 
-    async with session.get(api_url) as response:
+    API_URL = build_api_url(name, platform)
+    async with session.get(API_URL) as response:
         if response.status == 404:
             print(f"[404] Player not found: {name} on platform {platform}")
             return None

@@ -3,6 +3,7 @@ import json
 import sqlite3
 import os
 from discord.ext import commands
+from urllib.parse import urlencode
 
 
 # Enable intents (Members intent is mandatory for role manipulation)
@@ -11,6 +12,11 @@ intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
+def build_api_url(name: str, platform: str) -> str:
+    params = urlencode({'name': name, 'platform': platform})
+    return f"{API_BASE_URL}?{params}"
 
 file_folder = os.getenv('DB_FOLDER', './data/')
 os.makedirs(file_folder, exist_ok=True)

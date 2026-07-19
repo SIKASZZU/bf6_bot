@@ -1,11 +1,11 @@
 import unittest
 
-from commands import build_commands_help_message, build_links_message
+from commands import _build_commands_help_message, _build_links_message
 
 
-class CommandHelpTests(unittest.TestCase):
+class TestCommandHelpMessages(unittest.TestCase):
     def test_build_commands_help_message_includes_slash_commands(self):
-        message = build_commands_help_message()
+        message = _build_commands_help_message()
 
         self.assertIn('!commands', message)
         self.assertIn('/link', message)
@@ -18,7 +18,7 @@ class CommandHelpTests(unittest.TestCase):
             }
         }
 
-        message = build_links_message('123', data)
+        message = _build_links_message('123', data)
 
         self.assertIn('alice', message)
         self.assertIn('EA', message)
