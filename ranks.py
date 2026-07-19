@@ -1,5 +1,8 @@
 import discord
 
+# have this shit in desecending order meaning highest list value is the first entry in dict etc
+# else removing role breaks
+# i WILL make tests for it before i enter a grave
 r_dict = {
     'Vanemveteran': [3000, 5000],
     'Veteran': [500, 2999],
@@ -17,6 +20,9 @@ r_dict = {
     'Kapral': [5, 24],
     'Reamees': [1, 4],
 }
+
+def get_role_dict():
+    return r_dict
 
 def getRankNameFromCareerRank(userCareerRank : int) -> str:
     for rank_name, (min_val, max_val) in r_dict.items():

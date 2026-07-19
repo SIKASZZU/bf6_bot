@@ -5,7 +5,7 @@ import sqlite3
 from discord.ext import commands, tasks
 
 from globals import *
-from ranks import getRankNameFromCareerRank
+from ranks import getRankNameFromCareerRank, get_role_dict
 
 
 def get_conn():
@@ -72,8 +72,10 @@ async def global_rate_limit(ctx):
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
 
-    synced = await bot.tree.sync()
-    print(f"Synced {len(synced)} command(s): {[c.name for c in synced]}")
+    for guild in bot.guilds:
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        print(f"Synced {len(synced)} commands to {guild.name} ({guild.id})")
 
     if not update_all_players.is_running():
         update_all_players.start()
@@ -119,7 +121,7 @@ async def on_command_error(ctx, error):
 async def on_guild_join(guild):
     config = load_config()
     server_key = str(guild.id)
-    
+
     if server_key not in config:
         config[server_key] = {
             "channel_id": None,
@@ -133,18 +135,18 @@ async def on_guild_join(guild):
         data[server_key] = {}
         save_data(data)
         print(f"Initialized default configuration for server: {guild.name} ({server_key})")
-    
+
 
 @bot.event
 async def on_guild_remove(guild):
     config = load_config()
     server_key = str(guild.id)
-    
+
     if server_key in config:
         del config[server_key]
         save_config(config)
         print(f"Removed configuration for server: {guild.name} ({server_key})")
-    
+
     data = load_data()
     if server_key in data:
         del data[server_key]
@@ -217,6 +219,29 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
             await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
+async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name:str, channel: discord.TextChannel = None):
+    print('Removing role method called...')
+
+    current_role_names = {role.name for role in member.roles}
+    print(current_role_names)
+    for role_name in get_role_dict().keys():
+        if role_name not in current_role_names:
+            continue
+        if role_name == current_rank_name:
+            continue
+
+        role_cls = await get_role(guild, role_name)
+        if role_cls is None:
+            continue
+
+        print(f'Removing {role_name} from {member.display_name}')
+
+        await member.remove_roles(role_cls, 'Rank sync - removing role')
+
+        if channel:
+            await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
+
+    print('Removing role method complete!')
 
 async def assign_rank_role(member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
@@ -234,21 +259,23 @@ async def assign_rank_role(member: discord.Member, rank_name: str, channel: disc
     if role.position >= guild.me.top_role.position:
         print(f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
         if channel:
-            await channel.send(f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
+            await channel.send(f"❌ Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
         return
 
     try:
         if role not in member.roles:
-            await member.add_roles(role, reason="Rank sync")
+            await member.add_roles(role, reason="Rank sync - assign role")
             print(f"Assigned {rank_name} to {member.display_name}")
             if channel:
-                await channel.send(f"✅Assigned `{rank_name}` to `{member.display_name}`")
+                await channel.send(f"✅ Assigned `{rank_name}` to `{member.display_name}`")
+            return
 
     except discord.Forbidden:
         print(f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
 
     except discord.HTTPException as e:
         print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session, channel):
     if member.bot:
@@ -270,7 +297,9 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session, 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
     print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
+
     await assign_rank_role(member, concise_rank_name, channel)
+    await remove_rank_role(guild, member, concise_rank_name, channel)
 
 async def update_player(guild: discord.Guild, member: discord.Member, report_channel: discord.TextChannel = None):
     """Call update on player using their discord's name"""
@@ -289,6 +318,8 @@ async def update_player(guild: discord.Guild, member: discord.Member, report_cha
 async def update_all_players(report_channel: discord.TextChannel = None):
     await bot.wait_until_ready()
 
+    print(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
+
     guild = bot.guilds[0]
     CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
 
@@ -303,3 +334,5 @@ async def update_all_players(report_channel: discord.TextChannel = None):
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
             await _update_member(guild, member, session, channel)
+
+    print(f'Automatic update complete!')

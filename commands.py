@@ -5,37 +5,88 @@ from globals import *
 from helper import load_data, save_data, update_all_players, update_player
 from ranks import create_roles
 
-@bot.command(name='link')
-async def link(ctx, *, name: str):
-    """
-    Links your Discord account to a game account.
-    Usage: !link <name>
-    """
+
+async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
+    """Send a slash-command response safely, even after defer() or a prior response."""
+    if interaction.response.is_done():
+        await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
+    else:
+        await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
+
+
+@bot.tree.command(name='link', description='Link Discord account to game account.')
+@app_commands.describe(
+    name=f'The {DEFAULT_PLATFORM} account name',
+    member='Admin only: link discord member\'s account to name'
+)
+async def link(interaction: discord.Interaction, name: str, member: discord.Member = None):
+
+    await interaction.response.defer(ephemeral=False)
 
     platform = DEFAULT_PLATFORM
     if platform not in VALID_PLATFORMS:
-        await ctx.send(f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
+        await send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
+        return
+
+    target = member or interaction.user
+    # only allow linking someone else if the invoker is an admin
+    if member is not None and not interaction.user.guild_permissions.administrator:
+        await send_interaction_message(
+            interaction,
+            "❌ Only administrators can link accounts for other members.",
+            ephemeral=True,
+        )
         return
 
     data = load_data()
-    data.setdefault(str(ctx.guild.id), {})[str(ctx.author.id)] = {"name": name, "platform": platform}
+    data.setdefault(str(interaction.guild.id), {})[str(target.id)] = {"name": name, "platform": platform}
     save_data(data)
 
-    await ctx.send(f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
+    if target.id == interaction.user.id:
+        await send_interaction_message(interaction, f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
+    else:
+        await send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
 
-@bot.command(name="update")
-async def force_update(ctx):
+    await force_update.callback(interaction, member=target, update_everybody=False)
+
+@bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
+@app_commands.describe(
+    member='Admin only: link discord member\'s account to name',
+    update_everybody='Admin only: update all members that have been linked.'
+)
+async def force_update(interaction: discord.Interaction, member: discord.Member = None, update_everybody: bool = False):
     """Manually forces update on member. """
-    await ctx.send("🔄 Updating...")
+
+    is_admin = interaction.user.guild_permissions.administrator
+    if not is_admin and (member is not None or update_everybody):
+        await send_interaction_message(
+            interaction,
+            "❌ Only administrators can update accounts for other members or for everybody.",
+            ephemeral=True,
+        )
+        return
+
+    member_name = member.display_name if member else "None"
+
+    await send_interaction_message(
+        interaction,
+        f'🔄 Updating... (arguments: member: {member_name}, update_everybody: {update_everybody})',
+    )
+
+    target = member or interaction.user
 
     try:
-        await update_player(ctx.guild, ctx.author, report_channel=ctx.channel)
-        await ctx.send("✅ Player stats update completed successfully!")
+        if update_everybody:
+            await update_all_players()
+            await send_interaction_message(interaction, "✅ All players stats update completed successfully!")
+
+        else:
+            await update_player(interaction.guild, target, report_channel=interaction.channel)
+            await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
 
     except Exception as e:
-        await ctx.send(f"❌ An error occurred during the update: {e}")
         print(f"Manual update error: {e}")
-
+        await send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
 
 @bot.command(name="setup-roles")
 @commands.has_permissions(administrator=True)
@@ -50,25 +101,6 @@ async def setup_roles(ctx):
         msg += f"✅ Already existed: {', '.join(skipped)}"
 
     await ctx.send(msg or "❌ Something went wrong trying to create roles.")
-
-@bot.command(name="link-user")
-@commands.has_permissions(administrator=True)
-async def link_user(ctx, member: discord.Member, *, name: str, ):
-    """
-    Admin-only: link someone else's Discord account to a game account.
-    Usage: !link-user <@member> <name>
-    """
-
-    platform = DEFAULT_PLATFORM
-    if platform not in VALID_PLATFORMS:
-        await ctx.send(f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
-        return
-
-    data = load_data()
-    data.setdefault(str(ctx.guild.id), {})[str(member.id)] = {"name": name, "platform": platform}
-    save_data(data)
-
-    await ctx.send(f"✅ Linked {member.mention} to `{name}` on platform `{platform}`!")
 
 @bot.command(name="set-channel")
 @commands.has_permissions(administrator=True)
@@ -96,35 +128,6 @@ async def set_update_interval(ctx, hours: int):
     save_config(config)
 
     await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
-
-@bot.command(name="update-user")
-@commands.has_permissions(administrator=True)
-async def force_update_member(ctx, member: discord.Member):
-    """Manually forces update on member. """
-    await ctx.send("🔄 Looking for update on player...")
-
-    try:
-        await update_player(ctx.guild, member, report_channel=ctx.channel)
-        # await update_all_players(report_channel=ctx.channel)
-        await ctx.send("✅ Player stats update completed successfully!")
-
-    except Exception as e:
-        await ctx.send(f"❌ An error occurred during the update: {e}")
-        print(f"Manual update error: {e}")
-
-@bot.command(name="update-all")
-@commands.has_permissions(administrator=True)
-async def force_update_all(ctx):
-    """Manually forces the background update logic to run immediately via chat."""
-    await ctx.send("🔄 Automatic update in progress... ")
-
-    try:
-        await update_all_players(report_channel=ctx.channel)
-        await ctx.send("✅ Automatic update complete!")
-
-    except Exception as e:
-        await ctx.send(f"❌ An error occurred during the update: {e}")
-        print(f"Manual update error: {e}")
 
 @bot.command(name="commands")
 async def display_commands(ctx):

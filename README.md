@@ -4,4 +4,4 @@
     pip install -r requirements.txt  # install dependencies from the file you committed
 
 # TESTS
-    python -m tests.getRankNameFromCareerRankTest
+    py -m unittest discover -s tests -v
