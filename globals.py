@@ -37,7 +37,7 @@ def get_conn():
 
 def load_config():
     conn = get_conn()
-    rows = conn.execute(f'SELECT key, value FROM {DB_DATA_FILE}').fetchall()
+    rows = conn.execute(f'SELECT key, value FROM {DB_CONFIG_FILE}').fetchall()
     conn.close()
     return {key: json.loads(value) for key, value in rows}
 

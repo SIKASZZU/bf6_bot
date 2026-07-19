@@ -1,3 +1,4 @@
+import discord
 
 r_dict = {
     'Vanemveteran': [3000, 5000],
@@ -22,3 +23,28 @@ def getRankNameFromCareerRank(userCareerRank : int) -> str:
         if min_val <= userCareerRank <= max_val:
             return rank_name
     return None
+
+async def create_roles(guild: discord.Guild):
+    existing_role_names = {role.name for role in guild.roles}
+
+    created = []
+    skipped = []
+
+    for rank_name in r_dict.keys():
+        if rank_name in existing_role_names:
+            skipped.append(rank_name)
+            continue
+
+        try:
+            await guild.create_role(
+                name=rank_name,
+                mentionable=True,
+                reason="Auto-created by bot for rank system"
+            )
+            created.append(rank_name)
+        except discord.Forbidden:
+            print(f"Missing permissions to create role: {rank_name}")
+        except discord.HTTPException as e:
+            print(f"Failed to create role {rank_name}: {e}")
+
+    return created, skipped

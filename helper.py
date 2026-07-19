@@ -214,7 +214,7 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
     if role is None:
         print('Missing role!')
         if channel:
-            await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}")
+            await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
 
@@ -283,7 +283,7 @@ async def update_player(guild: discord.Guild, member: discord.Member, report_cha
         channel = bot.get_channel(CHANNEL_ID)
 
     async with aiohttp.ClientSession() as session:
-        _update_member(guild, member, session, channel)
+        await _update_member(guild, member, session, channel)
 
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None):

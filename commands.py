@@ -3,7 +3,7 @@ from discord import app_commands
 
 from globals import *
 from helper import load_data, save_data, update_all_players, update_player
-
+from ranks import create_roles
 
 @bot.command(name='link')
 async def link(ctx, *, name: str):
@@ -36,6 +36,20 @@ async def force_update(ctx):
         await ctx.send(f"❌ An error occurred during the update: {e}")
         print(f"Manual update error: {e}")
 
+
+@bot.command(name="setup-roles")
+@commands.has_permissions(administrator=True)
+async def setup_roles(ctx):
+    created, skipped = await create_roles(ctx.guild)
+
+    msg = ""
+    if created:
+        msg += f"✅ Created roles: {', '.join(created)}\n"
+
+    if skipped:
+        msg += f"✅ Already existed: {', '.join(skipped)}"
+
+    await ctx.send(msg or "❌ Something went wrong trying to create roles.")
 
 @bot.command(name="link-user")
 @commands.has_permissions(administrator=True)
@@ -114,20 +128,30 @@ async def force_update_all(ctx):
 
 @bot.command(name="commands")
 async def display_commands(ctx):
-    await ctx.send(f"\
-        All the commands:                       \n\
-        !info                                   \n\
-        !link <name>                            \n\
-        !update                                 \n\
-        --- Administrator only commands! ---    \n\
-        !link-user <@member> <name>             \n\
-        !set-channel                            \n\
-        !set-update-interval <hours>            \n\
-        !update-user <@member>                  \n\
-        !update-all                             \n\
-        "
-        # !supported-platforms                    \n\
-    )
+    lines = ["**All commands:**"]
+    admin_lines = ["**Administrator only:**"]
+
+    for cmd in bot.commands:
+        if cmd.hidden:
+            continue
+
+        # figure out if it's admin-only by checking its checks
+        is_admin = any(
+            getattr(check, '__qualname__', '').startswith('has_permissions')
+            for check in cmd.checks
+        )
+
+        line = f"!{cmd.name}"
+        if cmd.help:
+            line += f" — {cmd.help}"
+
+        if is_admin:
+            admin_lines.append(line)
+        else:
+            lines.append(line)
+
+    message = "\n".join(lines) + "\n\n" + "\n".join(admin_lines)
+    await ctx.send(message)
 
 @bot.command(name='info')
 async def display_info(ctx):
