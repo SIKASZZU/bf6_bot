@@ -15,6 +15,8 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 file_folder = os.getenv('DB_FOLDER', './data/')
 os.makedirs(file_folder, exist_ok=True)
 
+DEV_MODE = True
+
 DB_PATH         = os.path.join(file_folder, 'main.db')
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
