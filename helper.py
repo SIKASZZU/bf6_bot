@@ -153,13 +153,15 @@ async def on_guild_remove(guild):
         save_data(data)
         print(f"Removed saved data for server: {guild.name} ({server_key})")
 
-async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM):
+async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM, channel: discord.TextChannel = None):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
 
     API_URL = build_api_url(name, platform)
     async with session.get(API_URL) as response:
         if response.status == 404:
-            print(f"[404] Player not found: {name} on platform {platform}")
+            print(f"[404] Player not found: {name} on platform {platform}. {API_URL}")
+            if channel:
+                await channel.send(f"❌ API Error code: 404. Try again in a few minutes. Sorry!")
             return None
         if response.status != 200:
             print(f"API Error for {name}: HTTP {response.status}")
@@ -297,12 +299,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session, 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
         print(f"Skipping {member.display_name}: no game account linked (!link needed)")
+        if channel:
+            await channel.send(f"❌ Skipping {member.display_name}: no game account linked (!link needed)")
         return
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(session, name, platform)
+    stats = await fetch_player_stats(session, name, platform, channel)
     if stats is None:
         return
 
