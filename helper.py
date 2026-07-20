@@ -1,24 +1,10 @@
 import json
 import aiohttp
 import time
-import sqlite3
 from discord.ext import commands, tasks
 
 from globals import *
 from ranks import getRankNameFromCareerRank, get_role_dict
-
-
-def get_conn():
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(f'''
-        CREATE TABLE IF NOT EXISTS {DB_DATA_FILE} (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    ''')
-
-    return conn
 
 def load_data():
     conn = get_conn()

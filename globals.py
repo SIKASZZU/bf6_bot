@@ -21,7 +21,7 @@ def build_api_url(name: str, platform: str) -> str:
     params = urlencode({'name': name, 'platform': platform})
     return f"{API_BASE_URL}?{params}"
 
-file_folder = 'data'
+file_folder = '/data'
 def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
@@ -36,8 +36,13 @@ DEFAULT_PLATFORM = 'EA'
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
 def get_conn():
-
     conn = sqlite3.connect(DB_PATH)
+    conn.execute(f'''
+        CREATE TABLE IF NOT EXISTS {DB_DATA_FILE} (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
     conn.execute(f'''
         CREATE TABLE IF NOT EXISTS {DB_CONFIG_FILE} (
             key TEXT PRIMARY KEY,
