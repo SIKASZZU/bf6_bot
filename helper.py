@@ -285,8 +285,8 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session, 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
         print(f"Skipping {member.display_name}: no game account linked (!link needed)")
-        if channel:
-            await channel.send(f"❌ Skipping {member.display_name}: no game account linked (!link needed)")
+        # if channel:
+        #     await channel.send(f"❌ Skipping {member.display_name}: no game account linked (!link needed)")
         return
 
     name = entry["name"]
@@ -321,10 +321,13 @@ async def update_player(guild: discord.Guild, member: discord.Member, report_cha
 async def update_all_players(report_channel: discord.TextChannel = None):
     await bot.wait_until_ready()
 
-    print(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
-
     # TODO: this seems weird? How can it assure that first index is THE server
     guild = bot.guilds[0]
+
+    INTERVAL = load_config().get(str(guild.id), {}).get('update_interval')
+
+    print(f'Automatic update in progress... Interval: {INTERVAL} hours')
+
     CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
 
     # fix this
@@ -333,7 +336,7 @@ async def update_all_players(report_channel: discord.TextChannel = None):
         channel = bot.get_channel(CHANNEL_ID)
 
     if channel:
-        await channel.send(f'🔄 Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
+        await channel.send(f'🔄 Automatic update in progress... Interval: {INTERVAL} hours')
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
