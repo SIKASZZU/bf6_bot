@@ -235,7 +235,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
             print(f'Returning! role_cls is not a valid role object: {role_cls!r}')
             continue
 
-        print(f'Removing {role_name} from {member.display_name}')
+        print(f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
 
         await member.remove_roles(role_cls, 'Rank sync - removing role')
 
@@ -333,7 +333,7 @@ async def update_all_players(report_channel: discord.TextChannel = None):
         channel = bot.get_channel(CHANNEL_ID)
 
     if channel:
-        await channel.send(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
+        await channel.send(f'🔄 Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
