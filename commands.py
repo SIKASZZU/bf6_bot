@@ -134,8 +134,9 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     await send_interaction_message(
         interaction,
-        f'🔄 Updating... (arguments: member: {member_name}, update_everybody: {update_everybody})',
+        f'🔄 Updating...',
     )
+    print(f'(Updating... arguments: member: {member_name}, update_everybody: {update_everybody})')
 
     target = member or interaction.user
 

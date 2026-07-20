@@ -5,7 +5,7 @@ import os
 from discord.ext import commands
 from urllib.parse import urlencode
 
-DEV_MODE = True
+DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
 
 # Enable intents (Members intent is mandatory for role manipulation)
 intents = discord.Intents.default()
@@ -21,7 +21,7 @@ def build_api_url(name: str, platform: str) -> str:
     params = urlencode({'name': name, 'platform': platform})
     return f"{API_BASE_URL}?{params}"
 
-file_folder = os.getenv('DB_FOLDER', './data/')
+file_folder = os.getenv('/data')
 os.makedirs(file_folder, exist_ok=True)
 
 DB_PATH         = os.path.join(file_folder, 'main.db')
