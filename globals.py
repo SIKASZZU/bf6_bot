@@ -21,10 +21,12 @@ def build_api_url(name: str, platform: str) -> str:
     params = urlencode({'name': name, 'platform': platform})
     return f"{API_BASE_URL}?{params}"
 
-file_folder = '/data'
-os.makedirs(file_folder, exist_ok=True)
+file_folder = 'data'
+def get_db_path():
+    os.makedirs(file_folder, exist_ok=True)
+    return os.path.join(file_folder, 'main.db')
 
-DB_PATH         = os.path.join(file_folder, 'main.db')
+DB_PATH         = get_db_path()
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
 
