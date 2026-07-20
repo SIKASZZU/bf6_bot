@@ -5,13 +5,16 @@ import os
 from discord.ext import commands
 from urllib.parse import urlencode
 
+DEV_MODE = True
 
 # Enable intents (Members intent is mandatory for role manipulation)
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+COMMAND_PREFIX = '!' if not DEV_MODE else '!dev-'
+
+bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
 API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
 def build_api_url(name: str, platform: str) -> str:
@@ -20,8 +23,6 @@ def build_api_url(name: str, platform: str) -> str:
 
 file_folder = os.getenv('DB_FOLDER', './data/')
 os.makedirs(file_folder, exist_ok=True)
-
-DEV_MODE = True
 
 DB_PATH         = os.path.join(file_folder, 'main.db')
 DB_DATA_FILE    = 'data'
