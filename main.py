@@ -1,4 +1,5 @@
 import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -14,18 +15,13 @@ if not token:
     raise RuntimeError("Set DISCORD_TOKEN or DISCORD_TOKEN_DEV as an environment variable before running.")
 
 if __name__ == "__main__":
-    LAUNCH_CONFIRMED: bool = True
     print(f'Launching project DEV_MODE={DEV_MODE}')
 
-    if not DEV_MODE:
-        x = input('Are you sure, you want to run program in prod mode? Y/n: ')
-        if (x != 'Y'):
-            LAUNCH_CONFIRMED = False
+    if not DEV_MODE and sys.stdin.isatty():
+        x = input('WARNING! Are you sure, you want to run program in prod mode? Y/n: ')
+        if x.lower() != 'y':
+            print("Aborting.")
+            sys.exit(0)
 
-    if (LAUNCH_CONFIRMED):
-        bot.run(token)
-
-    else:
-        print('Shutting down.')
-
+    bot.run(token)
 
