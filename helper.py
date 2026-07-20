@@ -1,24 +1,10 @@
 import json
 import aiohttp
 import time
-import sqlite3
 from discord.ext import commands, tasks
 
 from globals import *
 from ranks import getRankNameFromCareerRank, get_role_dict
-
-
-def get_conn():
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(f'''
-        CREATE TABLE IF NOT EXISTS {DB_DATA_FILE} (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    ''')
-
-    return conn
 
 def load_data():
     conn = get_conn()
@@ -153,13 +139,15 @@ async def on_guild_remove(guild):
         save_data(data)
         print(f"Removed saved data for server: {guild.name} ({server_key})")
 
-async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM):
+async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM, channel: discord.TextChannel = None):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
-    api_url = f"https://api.gametools.network/bf6/profile/?name={name}&platform={platform}"
 
-    async with session.get(api_url) as response:
+    API_URL = build_api_url(name, platform)
+    async with session.get(API_URL) as response:
         if response.status == 404:
-            print(f"[404] Player not found: {name} on platform {platform}")
+            print(f"[404] Player not found: {name} on platform {platform}. {API_URL}")
+            if channel:
+                await channel.send(f"❌ API Error code: 404. Try again in a few minutes. Sorry!")
             return None
         if response.status != 200:
             print(f"API Error for {name}: HTTP {response.status}")
@@ -212,7 +200,17 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
         print(f"Failed to find rank_name: {rank_name}")
         return None
 
-    role = discord.utils.get(guild.roles, name=rank_name)
+    if hasattr(rank_name, "name") and not isinstance(rank_name, str):
+        return rank_name
+
+    if isinstance(rank_name, int):
+        return guild.get_role(rank_name)
+
+    if isinstance(rank_name, str):
+        role = discord.utils.get(guild.roles, name=rank_name)
+    else:
+        role = None
+
     if role is None:
         print('Missing role!')
         if channel:
@@ -223,7 +221,6 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
     print('Removing role method called...')
 
     current_role_names = {role.name for role in member.roles}
-    print(current_role_names)
     for role_name in get_role_dict().keys():
         if role_name not in current_role_names:
             continue
@@ -231,12 +228,16 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
             continue
 
         role_cls = await get_role(guild, role_name)
-        if role_cls is None:
+        if isinstance(role_cls, str):
+            role_cls = discord.utils.get(guild.roles, name=role_cls)
+
+        if role_cls is None or (not hasattr(role_cls, "name") and not isinstance(role_cls, str)):
+            print(f'Returning! role_cls is not a valid role object: {role_cls!r}')
             continue
 
-        print(f'Removing {role_name} from {member.display_name}')
+        print(f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
 
-        await member.remove_roles(role_cls, 'Rank sync - removing role')
+        await member.remove_roles(role_cls, reason='Rank sync - removing role')
 
         if channel:
             await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
@@ -284,12 +285,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session, 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
         print(f"Skipping {member.display_name}: no game account linked (!link needed)")
+        if channel:
+            await channel.send(f"❌ Skipping {member.display_name}: no game account linked (!link needed)")
         return
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(session, name, platform)
+    stats = await fetch_player_stats(session, name, platform, channel)
     if stats is None:
         return
 
@@ -320,6 +323,7 @@ async def update_all_players(report_channel: discord.TextChannel = None):
 
     print(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
 
+    # TODO: this seems weird? How can it assure that first index is THE server
     guild = bot.guilds[0]
     CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
 
@@ -328,8 +332,8 @@ async def update_all_players(report_channel: discord.TextChannel = None):
     if channel is None and CHANNEL_ID:
         channel = bot.get_channel(CHANNEL_ID)
 
-    if channel is None:
-        channel = guild.system_channel  # still may be None — every .send below is guarded
+    if channel:
+        await channel.send(f'🔄 Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:

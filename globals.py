@@ -3,19 +3,29 @@ import json
 import sqlite3
 import os
 from discord.ext import commands
+from urllib.parse import urlencode
 
+DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
 
 # Enable intents (Members intent is mandatory for role manipulation)
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+COMMAND_PREFIX = '!' if not DEV_MODE else 'dev!'
 
-file_folder = os.getenv('DB_FOLDER', './data/')
-os.makedirs(file_folder, exist_ok=True)
+bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
-DB_PATH         = os.path.join(file_folder, 'main.db')
+API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
+def build_api_url(name: str, platform: str) -> str:
+    params = urlencode({'name': name, 'platform': platform})
+    return f"{API_BASE_URL}?{params}"
+
+file_folder = '/data'
+def get_db_path():
+    os.makedirs(file_folder, exist_ok=True)
+    return os.path.join(file_folder, 'main.db')
+
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
 
@@ -25,8 +35,13 @@ DEFAULT_PLATFORM = 'EA'
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
 def get_conn():
-
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
+    conn.execute(f'''
+        CREATE TABLE IF NOT EXISTS {DB_DATA_FILE} (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
     conn.execute(f'''
         CREATE TABLE IF NOT EXISTS {DB_CONFIG_FILE} (
             key TEXT PRIMARY KEY,
