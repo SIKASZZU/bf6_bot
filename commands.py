@@ -205,7 +205,7 @@ async def display_links(ctx):
 @bot.command(name='info')
 async def display_info(ctx):
     """ Sends a message to channel containing information about and use cases of bot."""
-    await ctx.send(f"Bot assigns roles based on Bf6 career rank! Use !set-channel to assign for bot spam. Firstly administrator has to link member to their {DEFAULT_PLATFORM} account using !commands. Updating automatically every {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h.")
+    await ctx.send(f"Bot assigns roles based on Bf6 career rank! Use {COMMAND_PREFIX}set-channel to assign for bot spam. Firstly administrator has to link member to their {DEFAULT_PLATFORM} account using {COMMAND_PREFIX}commands. Updating automatically every {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h.")
 
 @bot.command(name='supported-platforms')
 async def display_supported_playforms(ctx):

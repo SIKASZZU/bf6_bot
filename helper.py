@@ -346,10 +346,8 @@ async def update_all_players(report_channel: discord.TextChannel = None):
     if channel is None and CHANNEL_ID:
         channel = bot.get_channel(CHANNEL_ID)
 
-    if channel is None:
-        channel = guild.system_channel  # still may be None — every .send below is guarded
-
-    await channel.send(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
+    if channel:
+        await channel.send(f'Automatic update in progress... Interval: {AUTO_UPDATE_TIMER_HOURS}h')
 
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
