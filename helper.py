@@ -237,7 +237,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
         print(f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
 
-        await member.remove_roles(role_cls, 'Rank sync - removing role')
+        await member.remove_roles(role_cls, reason='Rank sync - removing role')
 
         if channel:
             await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
