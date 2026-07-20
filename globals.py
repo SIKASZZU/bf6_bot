@@ -26,7 +26,6 @@ def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
 
-DB_PATH         = get_db_path()
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
 
@@ -36,7 +35,7 @@ DEFAULT_PLATFORM = 'EA'
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.execute(f'''
         CREATE TABLE IF NOT EXISTS {DB_DATA_FILE} (
             key TEXT PRIMARY KEY,
