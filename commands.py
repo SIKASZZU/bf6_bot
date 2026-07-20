@@ -41,7 +41,7 @@ def _build_commands_help_message():
             for check in getattr(cmd, 'checks', [])
         )
 
-        prefix = '!' if isinstance(cmd, commands.Command) else '/'
+        prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
         line = f"{prefix}{name}"
 
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None)
