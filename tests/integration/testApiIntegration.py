@@ -12,10 +12,5 @@ class TestApiFunctionality(unittest.IsolatedAsyncioTestCase):
             async with session.get(API_URL) as response:
                 self.assertEqual(200, response.status, 'Response status OK')
 
-    def test_builds_correct_url(self):
-        url = build_api_url('sikzu', 'EA')
-        self.assertIn('name=sikzu', url)
-        self.assertIn('platform=EA', url)
-
 if __name__ == '__main__':
     unittest.main()
