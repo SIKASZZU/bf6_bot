@@ -12,7 +12,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-COMMAND_PREFIX = '!' if not DEV_MODE else '!dev-'
+COMMAND_PREFIX = '!' if not DEV_MODE else 'dev!-'
 
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
