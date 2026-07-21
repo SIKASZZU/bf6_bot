@@ -176,7 +176,7 @@ async def set_channel(ctx):
     config.setdefault(str(ctx.guild.id), {})["channel_id"] = ctx.channel.id
     save_config(config)
 
-    await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval') or AUTO_UPDATE_TIMER_HOURS}h stats updates.")
+    await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
 
 @bot.command(name="set-update-interval")
 @commands.has_permissions(administrator=True)
@@ -192,7 +192,8 @@ async def set_update_interval(ctx, hours: int):
     config.setdefault(str(ctx.guild.id), {})['update_interval'] = hours
     save_config(config)
 
-    await ctx.send(f"✅ This channel ({ctx.channel.mention}) will now receive the {load_config().get(str(ctx.guild.id), {}).get('update_interval')}h stats updates.")
+    update_all_players.change_interval(hours=hours)
+    await ctx.send(f"✅ Done! The update interval is now {hours} hours.")
 
 @bot.command(name="commands")
 async def display_commands(ctx):
