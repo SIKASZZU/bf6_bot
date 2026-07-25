@@ -75,18 +75,20 @@ def _build_links_message(guild_id, data: dict) -> str:
     return "\n".join(lines)
 
 def _build_unlinked_message(guild_id, data):
-
     server_data = data.get(str(guild_id), {})
 
     if not server_data:
         return "No linked accounts found for this server in the database."
 
-    lines = [f"Linked accounts for this server:"]
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        return "Could not find this server in the bot's cache."
 
-    for guild_data in bot.get_guild(guild_id):
-        for member in guild_data.members:
-            if member not in server_data.keys():
-                lines.append(f"- {member}")
+    lines = ["Linked accounts for this server:"]
+
+    for member in guild.members:
+        if member not in server_data.keys():
+            lines.append(f"- {member}")
 
     return "\n".join(lines)
 
@@ -242,7 +244,7 @@ async def display_links(ctx):
 
 @bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(ctx):
-    await ctx.send(_build_unlinked_message(ctx.guild.id, load_data()))
+    print(await ctx.send(_build_unlinked_message(ctx.guild.id, load_data())))
 
 def _get_time_to_next_update():
     """Returns the time until the next automatic update in HH:MM:SS format."""
