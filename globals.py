@@ -26,6 +26,8 @@ def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
 
+API_MAX_RETRIES = 3
+
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
 

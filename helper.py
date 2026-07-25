@@ -54,6 +54,21 @@ async def global_rate_limit(ctx):
     _last_command_time = now
     return True
 
+@bot.after_invoke
+async def _send_no_channel_warning(ctx):
+    """Sends a warning message when no report channel is configured."""
+    warning_embed = discord.Embed(
+        title="⚠️ Report Channel Not Configured",
+        description=f"No report channel has been set for this server!",
+        color=discord.Color.red()
+    )
+    warning_embed.add_field(
+        name="How to fix:",
+        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
+        inline=False
+    )
+    await ctx.send(embed=warning_embed)
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
@@ -140,30 +155,52 @@ async def on_guild_remove(guild):
         print(f"Removed saved data for server: {guild.name} ({server_key})")
 
 async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str = DEFAULT_PLATFORM, channel: discord.TextChannel = None):
-    """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
+    """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
+    Retries up to max_retries times for any failed request."""
 
-    API_URL = build_api_url(name, platform)
-    async with session.get(API_URL) as response:
-        if response.status == 404:
-            print(f"[404] Player not found: {name} on platform {platform}. {API_URL}")
-            if channel:
-                await channel.send(f"❌ API Error code: 404. Try again in a few minutes. Sorry!")
-            return None
-        if response.status != 200:
-            print(f"API Error for {name}: HTTP {response.status}")
-            return None
+    max_retries = API_MAX_RETRIES
 
+    for attempt in range(1, max_retries + 1):
         try:
-            stats = await response.json()
+            API_URL = build_api_url(name, platform)
+            async with session.get(API_URL) as response:
+                if response.status == 404:
+                    print(f"[Attempt {attempt}/{max_retries}] 404 for {name} on platform {platform}. {API_URL}")
+                    if attempt < max_retries and channel:
+                        await channel.send(f"⚠️ API returned 404 for `{name}`. Retrying ({attempt}/{max_retries})...")
+                    continue
+
+                if response.status != 200:
+                    print(f"[Attempt {attempt}/{max_retries}] API Error for {name}: HTTP {response.status}")
+                    if attempt < max_retries and channel:
+                        await channel.send(f"⚠️ API error for `{name}` (HTTP {response.status}). Retrying ({attempt}/{max_retries})...")
+                    continue
+
+                try:
+                    stats = await response.json()
+                except Exception as e:
+                    print(f"[Attempt {attempt}/{max_retries}] Failed to parse JSON for {name}: {e}")
+                    if attempt < max_retries and channel:
+                        await channel.send(f"⚠️ Failed to parse API response for `{name}`. Retrying ({attempt}/{max_retries})...")
+                    continue
+
+                if isinstance(stats, dict) and "errors" in stats:
+                    print(f"[Attempt {attempt}/{max_retries}] GameTools API Error for {name}: {stats['errors']}")
+                    if attempt < max_retries and channel:
+                        await channel.send(f"⚠️ API returned an error for `{name}`. Retrying ({attempt}/{max_retries})...")
+                    continue
+
+                await channel.send(f'DEBUG: Total attempt count: {attempt}.')
+                return stats
+
         except Exception as e:
-            print(f"Failed to parse JSON for {name}: {e}")
-            return None
+            print(f"[Attempt {attempt}/{max_retries}] Exception fetching stats for {name}: {e}")
+            # if attempt < max_retries and channel:
+            #     await channel.send(f"⚠️ Exception while fetching stats for `{name}`. Retrying ({attempt}/{max_retries})...")
+            continue
 
-        if isinstance(stats, dict) and "errors" in stats:
-            print(f"GameTools API Error for {name}: {stats['errors']}")
-            return None
-
-        return stats
+    print(f"❌ Failed to fetch stats for {name} after {max_retries} attempts.")
+    return None
 
 
 def get_level_and_rank(stats: dict):
@@ -218,8 +255,6 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
     return role
 
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name:str, channel: discord.TextChannel = None):
-    print('Removing role method called...')
-
     current_role_names = {role.name for role in member.roles}
     for role_name in get_role_dict().keys():
         if role_name not in current_role_names:
@@ -241,8 +276,6 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
         if channel:
             await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
-
-    print('Removing role method complete!')
 
 async def assign_rank_role(member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
@@ -278,31 +311,39 @@ async def assign_rank_role(member: discord.Member, rank_name: str, channel: disc
         print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
 
 
-async def _update_member(guild: discord.Guild, member: discord.Member, session, channel):
+async def _update_member(guild: discord.Guild, member: discord.Member, session, channel, show_success: bool = True):
+    """Update a single member's rank. Only shows success messages if show_success is True."""
     if member.bot:
-        return
+        return False
 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
         print(f"Skipping {member.display_name}: no game account linked (!link needed)")
-        # if channel:
-        #     await channel.send(f"❌ Skipping {member.display_name}: no game account linked (!link needed)")
-        return
+        return False
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(session, name, platform, channel)
+    stats = await fetch_player_stats(session, name, platform, channel if show_success else None)
     if stats is None:
-        return
+        if show_success and channel:
+            await channel.send(f"❌ Failed to fetch stats for {member.mention} ({name}). API may be down.")
+        return False
 
     rankValue, _ = get_level_and_rank(stats)
+    if rankValue is None:
+        print(f"[WARNING] Could not extract rank for {member.display_name} ({name})")
+        if show_success and channel:
+            await channel.send(f"⚠️ Could not extract rank for {member.mention} ({name})")
+        return False
+
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
     print(f"--- {member.display_name} ({name} / {platform}) {rankValue} | {concise_rank_name} ---")
 
-    await assign_rank_role(member, concise_rank_name, channel)
-    await remove_rank_role(guild, member, concise_rank_name, channel)
+    await assign_rank_role(member, concise_rank_name, channel if show_success else None)
+    await remove_rank_role(guild, member, concise_rank_name, channel if show_success else None)
+    return True
 
 async def update_player(guild: discord.Guild, member: discord.Member, report_channel: discord.TextChannel = None):
     """Call update on player using their discord's name"""
@@ -318,28 +359,34 @@ async def update_player(guild: discord.Guild, member: discord.Member, report_cha
         await _update_member(guild, member, session, channel)
 
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
-async def update_all_players(report_channel: discord.TextChannel = None):
+async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
     await bot.wait_until_ready()
 
-    # TODO: this seems weird? How can it assure that first index is THE server
-    guild = bot.guilds[0]
+    if guild is None and report_channel is not None:
+        guild = getattr(report_channel, 'guild', None)
 
-    INTERVAL = load_config().get(str(guild.id), {}).get('update_interval')
+    if guild is None:
+        print('Automatic update skipped: no specific guild context provided.')
+        return
 
-    print(f'Automatic update in progress... Interval: {INTERVAL} hours')
+    config = load_config().get(str(guild.id), {})
 
-    CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
+    print(f'Automatic update in progress for {guild.name} ({guild.id})... Interval: {config.get('update_interval')} hours')
 
-    # fix this
     channel = report_channel
-    if channel is None and CHANNEL_ID:
-        channel = bot.get_channel(CHANNEL_ID)
+    if channel is None and config.get('channel_id'):
+        channel = bot.get_channel(config.get('channel_id'))
 
     if channel:
-        await channel.send(f'🔄 Automatic update in progress... Interval: {INTERVAL} hours')
+        await channel.send(f'🔄 Automatic update in progress for {guild.name}... Interval: {config.get('update_interval')} hours')
 
+    updated_count = 0
     async with aiohttp.ClientSession() as session:
         for member in guild.members:
-            await _update_member(guild, member, session, channel)
+            if await _update_member(guild, member, session, channel, show_success=False):
+                updated_count += 1
 
-    print(f'Automatic update complete!')
+    if channel:
+        await channel.send(f'✅ Automatic update complete! Updated {updated_count} member{'s' if updated_count > 1 else ''}.')
+
+    print(f'Automatic update complete for {guild.name}! Updated {updated_count} member{'s' if updated_count > 1 else ''}.')
