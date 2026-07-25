@@ -13,17 +13,6 @@ async def send_interaction_message(interaction: discord.Interaction, content: st
     else:
         await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
 
-# TODO: delete or move to helper
-def _check_and_warn_no_channel(ctx):
-    """Checks if a report channel is set and warns if not. Returns True if channel exists, False otherwise."""
-    config = load_config()
-    guild_config = config.get(str(ctx.guild.id), {})
-    channel_id = guild_config.get('channel_id')
-
-    if not channel_id:
-        return False
-    return True
-
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):

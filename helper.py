@@ -55,19 +55,25 @@ async def global_rate_limit(ctx):
     return True
 
 @bot.after_invoke
-async def _send_no_channel_warning(ctx):
+async def _check_and_send_warn_no_channel(ctx):
     """Sends a warning message when no report channel is configured."""
-    warning_embed = discord.Embed(
-        title="⚠️ Report Channel Not Configured",
-        description=f"No report channel has been set for this server!",
-        color=discord.Color.red()
-    )
-    warning_embed.add_field(
-        name="How to fix:",
-        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
-        inline=False
-    )
-    await ctx.send(embed=warning_embed)
+
+    config = load_config()
+    guild_config = config.get(str(ctx.guild.id), {})
+    channel_id = guild_config.get('channel_id')
+
+    if not channel_id:
+        warning_embed = discord.Embed(
+            title="⚠️ Report Channel Not Configured",
+            description=f"No report channel has been set for this server!",
+            color=discord.Color.red()
+        )
+        warning_embed.add_field(
+            name="How to fix:",
+            value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
+            inline=False
+        )
+        await ctx.send(embed=warning_embed)
 
 @bot.event
 async def on_ready():
