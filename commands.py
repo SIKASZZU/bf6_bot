@@ -84,10 +84,10 @@ def _build_unlinked_message(guild_id, data):
     if guild is None:
         return "Could not find this server in the bot's cache."
 
-    lines = ["Linked accounts for this server:"]
+    lines = ["Unlinked accounts for this server:"]
 
     for member in guild.members:
-        if member not in server_data.keys():
+        if str(member.id) not in server_data.keys():
             lines.append(f"- {member}")
 
     return "\n".join(lines)
