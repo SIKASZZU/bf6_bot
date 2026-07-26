@@ -41,6 +41,20 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update_member.await_count, 1)
         self.assertEqual(update_member.await_args_list[0].args[0], guild_b)
 
+    async def test_update_all_players_uses_all_available_guilds_when_no_guild_is_provided(self):
+        guild_a = FakeGuild(111, [FakeMember("Alice")])
+        guild_b = FakeGuild(222, [FakeMember("Bob")])
+
+        with patch("helper.bot.wait_until_ready", new=AsyncMock()), \
+             patch("helper.load_config", return_value={}), \
+             patch.object(type(helper.bot), "guilds", new_callable=PropertyMock, return_value=[guild_a, guild_b]), \
+             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
+             patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
+            await update_all_players()
+
+        self.assertEqual(update_member.await_count, 2)
+        self.assertEqual({call.args[0].id for call in update_member.await_args_list}, {111, 222})
+
 
 if __name__ == "__main__":
     unittest.main()

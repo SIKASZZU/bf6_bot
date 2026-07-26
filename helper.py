@@ -364,27 +364,18 @@ async def update_player(guild: discord.Guild, member: discord.Member, report_cha
     async with aiohttp.ClientSession() as session:
         await _update_member(guild, member, session, channel)
 
-@tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
-async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
-    await bot.wait_until_ready()
-
-    if guild is None and report_channel is not None:
-        guild = getattr(report_channel, 'guild', None)
-
-    if guild is None:
-        print('Automatic update skipped: no specific guild context provided.')
-        return
-
+async def _update_guild_members(guild: discord.Guild, report_channel: discord.TextChannel = None):
     config = load_config().get(str(guild.id), {})
+    update_interval = config.get('update_interval', AUTO_UPDATE_TIMER_HOURS)
 
-    print(f'Automatic update in progress for {guild.name} ({guild.id})... Interval: {config.get('update_interval')} hours')
+    print(f"Automatic update in progress for {guild.name} ({guild.id})... Interval: {update_interval} hours")
 
     channel = report_channel
     if channel is None and config.get('channel_id'):
         channel = bot.get_channel(config.get('channel_id'))
 
     if channel:
-        await channel.send(f'🔄 Automatic update in progress for {guild.name}... Interval: {config.get('update_interval')} hours')
+        await channel.send(f"🔄 Automatic update in progress for {guild.name}... Interval: {update_interval} hours")
 
     updated_count = 0
     async with aiohttp.ClientSession() as session:
@@ -393,6 +384,26 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
                 updated_count += 1
 
     if channel:
-        await channel.send(f'✅ Automatic update complete! Updated {updated_count} member{'s' if updated_count > 1 else ''}.')
+        await channel.send(f"✅ Automatic update complete! Updated {updated_count} member{'s' if updated_count > 1 else ''}.")
 
-    print(f'Automatic update complete for {guild.name}! Updated {updated_count} member{'s' if updated_count > 1 else ''}.')
+    print(f"Automatic update complete for {guild.name}! Updated {updated_count} member{'s' if updated_count > 1 else ''}.")
+
+
+@tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
+async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
+    await bot.wait_until_ready()
+
+    if guild is not None:
+        guilds_to_update = [guild]
+    elif report_channel is not None:
+        guild_context = getattr(report_channel, 'guild', None)
+        guilds_to_update = [guild_context] if guild_context is not None else []
+    else:
+        guilds_to_update = list(bot.guilds)
+
+    if not guilds_to_update:
+        print('Error! Automatic update skipped: no specific guild context provided.')
+        return
+
+    for target_guild in guilds_to_update:
+        await _update_guild_members(target_guild, report_channel=report_channel)

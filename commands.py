@@ -4,6 +4,7 @@ from discord import app_commands
 from globals import *
 from helper import load_data, save_data, update_all_players, update_player
 from ranks import create_roles
+import datetime
 
 # TODO: helper!
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
@@ -87,6 +88,8 @@ def _build_unlinked_message(guild_id, data):
     lines = ["Unlinked accounts for this server:"]
 
     for member in guild.members:
+        if member.bot:
+            continue
         if str(member.id) not in server_data.keys():
             lines.append(f"- {member}")
 
@@ -244,23 +247,27 @@ async def display_links(ctx):
 
 @bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(ctx):
-    print(await ctx.send(_build_unlinked_message(ctx.guild.id, load_data())))
+    msg = _build_unlinked_message(ctx.guild.id, load_data())
+    print(msg)
+    await ctx.send(msg)
 
 def _get_time_to_next_update():
     """Returns the time until the next automatic update in HH:MM:SS format."""
     try:
         if hasattr(update_all_players, 'next_iteration') and update_all_players.next_iteration:
-            import datetime
-            now = datetime.datetime.utcnow()
-            time_left = update_all_players.next_iteration - now
+            next_iteration = update_all_players.next_iteration
+            if next_iteration:
+                now = datetime.datetime.now(datetime.timezone.utc)
+                time_left = next_iteration - now
 
-            total_seconds = int(time_left.total_seconds())
-            if total_seconds < 0:
-                return "Starting soon..."
+                total_seconds = int(time_left.total_seconds())
+                if total_seconds < 0:
+                    return "Starting soon..."
 
-            hours, remainder = divmod(total_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            return f"{hours}h {minutes}m {seconds}s"
+                hours, remainder = divmod(total_seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                return f"{hours}h {minutes}m {seconds}s"
+
     except Exception as e:
         print(f"Error calculating next update time: {e}")
     return "Unknown"
