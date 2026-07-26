@@ -2,6 +2,7 @@ import json
 import aiohttp
 import time
 from discord.ext import commands, tasks
+import asyncio
 
 from globals import *
 from ranks import getRankNameFromCareerRank, get_role_dict
@@ -170,42 +171,23 @@ async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform
         try:
             API_URL = build_api_url(name, platform)
             async with session.get(API_URL) as response:
-                if response.status == 404:
-                    print(f"[Attempt {attempt}/{max_retries}] 404 for {name} on platform {platform}. {API_URL}")
-                    if attempt < max_retries and channel:
-                        await channel.send(f"⚠️ API returned 404 for `{name}`. Retrying ({attempt}/{max_retries})...")
-                    continue
-
                 if response.status != 200:
-                    print(f"[Attempt {attempt}/{max_retries}] API Error for {name}: HTTP {response.status}")
-                    if attempt < max_retries and channel:
-                        await channel.send(f"⚠️ API error for `{name}` (HTTP {response.status}). Retrying ({attempt}/{max_retries})...")
-                    continue
+                    raise Exception(f'{response.status}')
 
-                try:
-                    stats = await response.json()
-                except Exception as e:
-                    print(f"[Attempt {attempt}/{max_retries}] Failed to parse JSON for {name}: {e}")
-                    if attempt < max_retries and channel:
-                        await channel.send(f"⚠️ Failed to parse API response for `{name}`. Retrying ({attempt}/{max_retries})...")
-                    continue
+                stats = await response.json()
 
                 if isinstance(stats, dict) and "errors" in stats:
-                    print(f"[Attempt {attempt}/{max_retries}] GameTools API Error for {name}: {stats['errors']}")
-                    if attempt < max_retries and channel:
-                        await channel.send(f"⚠️ API returned an error for `{name}`. Retrying ({attempt}/{max_retries})...")
-                    continue
+                    raise Exception(f"{stats['errors']}")
 
-                await channel.send(f'DEBUG: Total attempt count: {attempt}.')
+                print(f"✅ Data fetch successful for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
                 return stats
 
         except Exception as e:
-            print(f"[Attempt {attempt}/{max_retries}] Exception fetching stats for {name}: {e}")
-            # if attempt < max_retries and channel:
-            #     await channel.send(f"⚠️ Exception while fetching stats for `{name}`. Retrying ({attempt}/{max_retries})...")
+            print(f"ERROR! [Attempt {attempt}/{max_retries}] ({name}, {platform}): {e}")
+            await asyncio.sleep(2 ** attempt)
             continue
 
-    print(f"❌ Failed to fetch stats for {name} after {max_retries} attempts.")
+    print(f"❌ Data fetch failed for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
     return None
 
 
@@ -319,6 +301,8 @@ async def assign_rank_role(member: discord.Member, rank_name: str, channel: disc
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session, channel, show_success: bool = True):
     """Update a single member's rank. Only shows success messages if show_success is True."""
+    await bot.wait_until_ready()
+
     if member.bot:
         return False
 
@@ -351,42 +335,28 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session, 
     await remove_rank_role(guild, member, concise_rank_name, channel if show_success else None)
     return True
 
-async def update_player(guild: discord.Guild, member: discord.Member, report_channel: discord.TextChannel = None):
-    """Call update on player using their discord's name"""
-    await bot.wait_until_ready()
+async def _update_guild_members(guild: discord.Guild, session: aiohttp.ClientSession, channel: discord.TextChannel):
+    print(f"Automatic update in progress for {guild.name} ({guild.id})... Interval: {load_config().get(str(guild.id), {}).get('update_interval', AUTO_UPDATE_TIMER_HOURS)} hours")
 
-    CHANNEL_ID = load_config().get(str(guild.id), {}).get('channel_id')
-
-    channel = report_channel
-    if channel is None and CHANNEL_ID:
-        channel = bot.get_channel(CHANNEL_ID)
-
-    async with aiohttp.ClientSession() as session:
-        await _update_member(guild, member, session, channel)
-
-async def _update_guild_members(guild: discord.Guild, report_channel: discord.TextChannel = None):
-    config = load_config().get(str(guild.id), {})
-    update_interval = config.get('update_interval', AUTO_UPDATE_TIMER_HOURS)
-
-    print(f"Automatic update in progress for {guild.name} ({guild.id})... Interval: {update_interval} hours")
-
-    channel = report_channel
-    if channel is None and config.get('channel_id'):
-        channel = bot.get_channel(config.get('channel_id'))
+    if channel is None and load_config().get(str(guild.id), {}).get('channel_id'):
+        channel = bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))
 
     if channel:
-        await channel.send(f"🔄 Automatic update in progress for {guild.name}... Interval: {update_interval} hours")
+        await channel.send(f"🔄 Automatic update in progress for {guild.name}...")
+    else:
+        # set_config_guild_channel(bot.get_channel(channel_id))
+        print('#9w8dbufg - channel is none and nothing will be done! ')
+        ...
 
     updated_count = 0
-    async with aiohttp.ClientSession() as session:
-        for member in guild.members:
-            if await _update_member(guild, member, session, channel, show_success=False):
-                updated_count += 1
+    for member in guild.members:
+        if await _update_member(guild, member, session, channel, show_success=False):
+            updated_count += 1
 
     if channel:
-        await channel.send(f"✅ Automatic update complete! Updated {updated_count} member{'s' if updated_count > 1 else ''}.")
+        await channel.send(f"✅ Automatic update complete! Updated {updated_count} member{'' if (updated_count == 0 or updated_count == 1) else 's'}.")
 
-    print(f"Automatic update complete for {guild.name}! Updated {updated_count} member{'s' if updated_count > 1 else ''}.")
+    print(f"Automatic update complete for {guild.name}! Updated {updated_count} member{'' if (updated_count == 0 or updated_count == 1) else 's'}.")
 
 
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
@@ -405,5 +375,6 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
         print('Error! Automatic update skipped: no specific guild context provided.')
         return
 
-    for target_guild in guilds_to_update:
-        await _update_guild_members(target_guild, report_channel=report_channel)
+    async with aiohttp.ClientSession() as session:
+        for target_guild in guilds_to_update:
+            await _update_guild_members(target_guild, session, channel=report_channel)

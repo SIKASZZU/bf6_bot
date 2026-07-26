@@ -2,7 +2,7 @@ from discord.ext import commands
 from discord import app_commands
 
 from globals import *
-from helper import load_data, save_data, update_all_players, update_player
+from helper import load_data, save_data, update_all_players, _update_member
 from ranks import create_roles
 import datetime
 
@@ -172,7 +172,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             await send_interaction_message(interaction, "✅ All players stats update completed successfully!")
 
         else:
-            await update_player(interaction.guild, target, report_channel=interaction.channel)
+            await _update_member(interaction.guild, target, report_channel=interaction.channel)
             await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
 
         # # Check if report channel is configured
