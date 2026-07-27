@@ -66,11 +66,7 @@ async def global_rate_limit(ctx):
 async def _check_and_send_warn_no_channel(ctx):
     """Sends a warning message when no report channel is configured."""
 
-    config = load_config()
-    guild_config = config.get(str(ctx.guild.id), {})
-    channel_id = guild_config.get('channel_id')
-
-    if not channel_id:
+    if not load_config().get(str(ctx.guild.id), {}).get('channel_id'):
         warning_embed = discord.Embed(
             title="⚠️ Report Channel Not Configured",
             description=f"No report channel has been set for this server!",
@@ -156,16 +152,20 @@ async def on_guild_remove(guild):
     config = load_config()
     server_key = str(guild.id)
 
+    msg = f'[REMOVED] bot from {guild.name} id: {guild.id}\n'
+
     if server_key in config:
         del config[server_key]
         save_config(config)
-        print(f"Removed configuration for server: {guild.name} ({server_key})")
+        msg += f"Removed configuration for server: {guild.name} ({server_key})\n"
 
     data = load_data()
     if server_key in data:
         del data[server_key]
         save_data(data)
-        print(f"Removed saved data for server: {guild.name} ({server_key})")
+        msg += f"Removed saved data for server: {guild.name} ({server_key})\n"
+
+    print(msg)
 
 async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.

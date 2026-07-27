@@ -169,8 +169,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
         else:
             async with aiohttp.ClientSession() as session:
-                await _update_member(interaction.guild, target, session, channel=interaction.channel)
-            await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
+                if await _update_member(interaction.guild, target, session, channel=interaction.channel):
+                    await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
 
     except Exception as e:
         print(f"Manual update error: {e}")
