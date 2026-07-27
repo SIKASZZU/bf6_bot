@@ -133,19 +133,23 @@ async def on_guild_join(guild):
     config = load_config()
     server_key = str(guild.id)
 
+    msg = f'[JOINED] bot into {guild.name} id: {guild.id}\n'
+
     if server_key not in config:
         config[server_key] = {
             "channel_id": None,
             "update_interval": 1
         }
         save_config(config)
-        print(f"Initialized default config configuration for server: {guild.name} ({server_key})")
+        msg += f"Initialized default config configuration for server: {guild.name} ({server_key})\n"
 
     data = load_data()
     if server_key not in data:
         data[server_key] = {}
         save_data(data)
-        print(f"Initialized default data configuration for server: {guild.name} ({server_key})")
+        msg += f"Initialized default data configuration for server: {guild.name} ({server_key})"
+
+    print(msg)
 
 @bot.event
 async def on_guild_remove(guild):
@@ -163,7 +167,7 @@ async def on_guild_remove(guild):
     if server_key in data:
         del data[server_key]
         save_data(data)
-        msg += f"Removed saved data for server: {guild.name} ({server_key})\n"
+        msg += f"Removed saved data for server: {guild.name} ({server_key})"
 
     print(msg)
 
