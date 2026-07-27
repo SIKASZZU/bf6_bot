@@ -383,6 +383,7 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
 
             log(guild, f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
+# TODO: helperi?
 running_loops: dict[int, tasks.Loop] = {}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:

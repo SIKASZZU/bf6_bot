@@ -3,7 +3,7 @@ from discord import app_commands
 import aiohttp
 
 from globals import *
-from helper import load_data, save_data, update_all_players, _update_member, send_interaction_message, restart_guild_update_loop
+from helper import load_data, save_data, update_all_players, _update_member, send_interaction_message, restart_guild_update_loop, running_loops
 from ranks import create_roles
 import datetime
 
@@ -232,24 +232,22 @@ async def display_unlinks(ctx):
     await ctx.send(msg)
 
 def _get_time_to_next_update(guild: discord.Guild):
-    """Returns the time until the next automatic update in HH:MM:SS format."""
     try:
-        if hasattr(update_all_players, 'next_iteration') and update_all_players.next_iteration:
-            next_iteration = update_all_players.next_iteration
-            if next_iteration:
-                now = datetime.datetime.now(datetime.timezone.utc)
-                time_left = next_iteration - now
+        loop = running_loops.get(guild.id)
+        if loop and loop.next_iteration:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            time_left = loop.next_iteration - now
 
-                total_seconds = int(time_left.total_seconds())
-                if total_seconds < 0:
-                    return "Starting soon..."
+            total_seconds = int(time_left.total_seconds())
+            if total_seconds < 0:
+                return "Starting soon..."
 
-                hours, remainder = divmod(total_seconds, 3600)
-                minutes, seconds = divmod(remainder, 60)
-                return f"{hours}h {minutes}m {seconds}s"
+            hours, remainder = divmod(total_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours}h {minutes}m {seconds}s"
 
     except Exception as e:
-        log(guild, f"Error calculating next update time: {e}")
+        print(f"Error calculating next update time: {e}")
     return "Unknown"
 
 @bot.command(name='info')
