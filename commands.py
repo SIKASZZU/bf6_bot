@@ -1,18 +1,12 @@
 from discord.ext import commands
 from discord import app_commands
+import aiohttp
 
 from globals import *
-from helper import load_data, save_data, update_all_players, _update_member
+from helper import load_data, save_data, update_all_players, _update_member, send_interaction_message
 from ranks import create_roles
 import datetime
 
-# TODO: helper!
-async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
-    """Send a slash-command response safely, even after defer() or a prior response."""
-    if interaction.response.is_done():
-        await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
-    else:
-        await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
 
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
@@ -67,11 +61,10 @@ def _build_links_message(guild_id, data: dict) -> str:
 
     lines = [f"Linked accounts for this server:"]
     for discord_id, entry in server_data.items():
-        if isinstance(entry, dict):
-            name = entry.get('name', 'unknown')
-            platform = entry.get('platform', DEFAULT_PLATFORM)
+        name = entry.get('name', 'unknown')
+        platform = entry.get('platform', DEFAULT_PLATFORM)
 
-        lines.append(f"- {discord_id}: {name} ({platform})")
+        lines.append(f"- {bot.get_guild(guild_id).get_member(discord_id).display_name}: {name} ({platform})")
 
     return "\n".join(lines)
 
@@ -172,17 +165,9 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             await send_interaction_message(interaction, "✅ All players stats update completed successfully!")
 
         else:
-            await _update_member(interaction.guild, target, report_channel=interaction.channel)
+            async with aiohttp.ClientSession() as session:
+                await _update_member(interaction.guild, target, session, channel=interaction.channel)
             await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
-
-        # # Check if report channel is configured
-        # config = load_config()
-        # if not config.get(str(interaction.guild.id), {}).get('channel_id') and update_everybody:
-        #     await send_interaction_message(
-        #         interaction,
-        #         f"⚠️ **Note:** No report channel is configured! Update results were not announced to a specific channel. Admin: use `{COMMAND_PREFIX}set-channel` in your desired channel.",
-        #         ephemeral=True
-        #     )
 
     except Exception as e:
         print(f"Manual update error: {e}")
@@ -195,12 +180,10 @@ async def setup_roles(ctx):
 
     msg = ""
     if created:
-        msg += f"✅ Created roles: {', '.join(created)}\n"
+        msg += f"✅ Created roles: \n{',\n'.join(created)}\n"
 
     if skipped:
         msg += f"✅ Already existed: {', '.join(skipped)}\n"
-
-    msg += f"\n**Next steps:**\n1. Run `{COMMAND_PREFIX}set-channel` in your desired report channel\n2. Members use `{COMMAND_PREFIX}link <username>` to link their accounts"
 
     await ctx.send(msg or "❌ Something went wrong trying to create roles.")
 
