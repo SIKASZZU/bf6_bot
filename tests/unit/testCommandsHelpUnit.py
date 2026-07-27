@@ -6,6 +6,7 @@ from commands import _build_commands_help_message, _build_links_message
 class FakeGuild:
     def __init__(self, id):
         self.id = id
+        self.name = f"Guild {id}"
 
     def get_member(self, member_id):
         return None  # simulate no cached members for this test
