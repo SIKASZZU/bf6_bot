@@ -161,14 +161,12 @@ async def on_guild_remove(guild):
     msg = f'[REMOVED] bot from {guild.name} id: {guild.id}\n'
 
     if server_key in config:
-        del config[server_key]
-        save_config(config)
+        delete_config_key(server_key)
         msg += f"Removed configuration for server: {guild.name} ({server_key})\n"
 
     data = load_data()
     if server_key in data:
-        del data[server_key]
-        save_data(data)
+        delete_data_key(server_key)
         msg += f"Removed saved data for server: {guild.name} ({server_key})"
 
     print(msg)

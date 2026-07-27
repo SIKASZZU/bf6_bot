@@ -71,3 +71,15 @@ def save_config(config: dict):
         )
     conn.commit()
     conn.close()
+
+def delete_config_key(server_key: str):
+    conn = get_conn()
+    conn.execute(f'DELETE FROM {DB_CONFIG_FILE} WHERE key = ?', (server_key,))
+    conn.commit()
+    conn.close()
+
+def delete_data_key(server_key: str):
+    conn = get_conn()
+    conn.execute(f'DELETE FROM {DB_DATA_FILE} WHERE key = ?', (server_key,))
+    conn.commit()
+    conn.close()
