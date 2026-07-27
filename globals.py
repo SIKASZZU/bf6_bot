@@ -2,6 +2,7 @@ import discord
 import json
 import sqlite3
 import os
+import sys
 from discord.ext import commands
 from urllib.parse import urlencode
 
@@ -37,11 +38,10 @@ DEFAULT_PLATFORM = 'EA'
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
 def log(guild: discord.Guild, message: str):
-    if guild:
-        print(f'[{guild.name}]  {message}')
-        return
-
-    print(message)
+    def get_caller() -> str:
+        try: return sys._getframe(2).f_code.co_name
+        except ValueError: return "Unknown"
+    print(f'[server:{guild.name if guild else 'Unknown'}] (func:{get_caller()}) msg: {message}')
 
 def get_conn():
     conn = sqlite3.connect(get_db_path())
