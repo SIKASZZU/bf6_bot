@@ -88,8 +88,10 @@ async def on_ready():
         synced = await bot.tree.sync(guild=guild)
         print(f"Synced {len(synced)} commands to {guild.name} ({guild.id})")
 
-    if not update_all_players.is_running():
-        update_all_players.start()
+    start_guild_update_loop(guild)
+
+    # if not update_all_players.is_running():
+    #     update_all_players.start()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -170,6 +172,10 @@ async def on_guild_remove(guild):
         msg += f"Removed saved data for server: {guild.name} ({server_key})"
 
     print(msg)
+
+    existing = running_loops.pop(guild.id, None)
+    if existing:
+        existing.cancel()
 
 async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -377,3 +383,51 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
                     updated_count += 1
 
             print(f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+
+running_loops: dict[int, tasks.Loop] = {}
+
+def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
+    @tasks.loop(hours=interval_hours)
+    async def _loop():
+        await bot.wait_until_ready()
+
+        guild = bot.get_guild(guild_id)
+        if guild is None:
+            print(f"[ERROR] Guild {guild_id} no longer accessible, stopping its update loop.")
+            _loop.cancel()
+            return
+
+        guild_config = load_config().get(str(guild_id), {})
+        channel = None
+        if guild_config.get('channel_id'):
+            channel = bot.get_channel(int(guild_config['channel_id']))
+
+        print(f"[START AUTOMATIC UPDATE] [{guild.name}] Interval: {interval_hours}h")
+
+        updated_count = 0
+        async with aiohttp.ClientSession() as session:
+            for member in guild.members:
+                if await _update_member(guild, member, session, channel):
+                    updated_count += 1
+
+        print(f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+
+    return _loop
+
+def start_guild_update_loop(guild: discord.Guild):
+    """Starts (or restarts) the automatic update loop for one guild, using its configured interval."""
+    existing = running_loops.get(guild.id)
+    if existing and existing.is_running():
+        return
+
+    interval = load_config().get(str(guild.id), {}).get('update_interval', AUTO_UPDATE_TIMER_HOURS)
+    loop = _make_guild_update_loop(guild.id, interval)
+    running_loops[guild.id] = loop
+    loop.start()
+
+def restart_guild_update_loop(guild: discord.Guild):
+    """Call this after update_interval changes in config, so the new interval takes effect."""
+    existing = running_loops.get(guild.id)
+    if existing:
+        existing.cancel()
+    start_guild_update_loop(guild)

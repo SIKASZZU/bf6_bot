@@ -3,7 +3,7 @@ from discord import app_commands
 import aiohttp
 
 from globals import *
-from helper import load_data, save_data, update_all_players, _update_member, send_interaction_message
+from helper import load_data, save_data, update_all_players, _update_member, send_interaction_message, restart_guild_update_loop
 from ranks import create_roles
 import datetime
 
@@ -213,7 +213,8 @@ async def set_update_interval(ctx, hours: int):
     config.setdefault(str(ctx.guild.id), {})['update_interval'] = hours
     save_config(config)
 
-    update_all_players.change_interval(hours=hours)
+    restart_guild_update_loop(ctx.guild)
+    # update_all_players.change_interval(hours=hours)
     await ctx.send(f"✅ Done! The update interval is now {hours} hours.")
 
 @bot.command(name="commands")
