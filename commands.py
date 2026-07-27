@@ -309,12 +309,12 @@ async def display_info(ctx):
         inline=False
     )
 
-    # Platforms
-    embed.add_field(
-        name="🎮 Supported Platforms",
-        value=f"Default: **{DEFAULT_PLATFORM}**\nAll: {', '.join(sorted(VALID_PLATFORMS))}",
-        inline=False
-    )
+    # # Platforms
+    # embed.add_field(
+    #     name="🎮 Supported Platforms",
+    #     value=f"Default: **{DEFAULT_PLATFORM}**\nAll: {', '.join(sorted(VALID_PLATFORMS))}",
+    #     inline=False
+    # )
 
     # All Commands
     embed.add_field(
@@ -410,10 +410,10 @@ async def show_time_to_update(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command(name='supported-platforms')
-async def display_supported_playforms(ctx):
-    """ Sends a message to channel containing information about and use cases of bot."""
-    await ctx.send(f"Default platform: {DEFAULT_PLATFORM} \n All supported: {', '.join(sorted(VALID_PLATFORMS))}")
+# @bot.command(name='supported-platforms')
+# async def display_supported_playforms(ctx):
+#     """ Sends a message to channel containing information about and use cases of bot."""
+#     await ctx.send(f"Default platform: {DEFAULT_PLATFORM} \n All supported: {', '.join(sorted(VALID_PLATFORMS))}")
 
 @bot.command(name='test-role')
 @commands.has_permissions(administrator=True)
