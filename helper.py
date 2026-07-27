@@ -340,7 +340,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return True
 
-#TODO: fix for single 
+#TODO: fix for single
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
     await bot.wait_until_ready()
@@ -349,7 +349,7 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
         guilds_to_update = [guild]
     elif report_channel is not None:
         guild_context = getattr(report_channel, 'guild', None)
-        guilds_to_update = [guild_context] if guild_context is not None else []
+        guilds_to_update = [guild_context] if guild_context is not None else list(bot.guilds)
     else:
         guilds_to_update = list(bot.guilds)
 
@@ -358,10 +358,10 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
         return
 
     async with aiohttp.ClientSession() as session:
-        print(f'[DEBUG] guild_to_update {guilds_to_update}')
+        print(f"[DEBUG] guild_to_update {[getattr(guild, 'name', str(guild)) for guild in guilds_to_update]}")
         for target_guild in guilds_to_update:
-
-            channel = report_channel if (report_channel and report_channel.guild.id == target_guild.id) else None
+            report_guild = getattr(report_channel, 'guild', None)
+            channel = report_channel if (report_channel is not None and report_guild is not None and report_guild.id == target_guild.id) else None
             if channel is None and load_config().get(str(target_guild.id), {}).get('channel_id'):
                 channel = bot.get_channel(int(load_config().get(str(target_guild.id), {})['channel_id']))
 
