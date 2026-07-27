@@ -7,14 +7,15 @@ import asyncio
 from globals import *
 from ranks import getRankNameFromCareerRank, get_role_dict
 
-def load_data():
+def load_data() -> dict:
     conn = get_conn()
     rows = conn.execute(f'SELECT key, value FROM {DB_DATA_FILE}').fetchall()
     conn.close()
     return {key: json.loads(value) for key, value in rows}
 
-def save_data(data):
-    if not data:
+def save_data(data: dict):
+    if not isinstance(data, dict):
+        # TODO: figure out how to remove print?
         print('Returning! No data provided for save_data.')
         return
 
@@ -81,14 +82,15 @@ async def _check_and_send_warn_no_channel(ctx):
 
 @bot.event
 async def on_ready():
+    #TODO: fix print here maybbe
     print(f"Logged in as {bot.user.name}!")
 
     for guild in bot.guilds:
         bot.tree.copy_global_to(guild=guild)
         synced = await bot.tree.sync(guild=guild)
-        print(f"Synced {len(synced)} commands to {guild.name} ({guild.id})")
+        log(guild, f"Synced {len(synced)} commands to {guild.name} ({guild.id})")
 
-    start_guild_update_loop(guild)
+        start_guild_update_loop(guild)
 
     # if not update_all_players.is_running():
     #     update_all_players.start()
@@ -127,7 +129,7 @@ async def on_command_error(ctx, error):
         await ctx.send("⏳ Bot is busy, try again in a moment.")
         return
 
-    print(f"Unhandled error in command '{ctx.command}': {error}")
+    log(ctx.guild, f"Unhandled error in command '{ctx.command}': {error}")
     await ctx.send(f"❌ An unexpected error occurred: {error}")
 
 @bot.event
@@ -151,7 +153,7 @@ async def on_guild_join(guild):
         save_data(data)
         msg += f"Initialized default data configuration for server: {guild.name} ({server_key})"
 
-    print(msg)
+    log(guild, msg)
 
 @bot.event
 async def on_guild_remove(guild):
@@ -169,13 +171,13 @@ async def on_guild_remove(guild):
         delete_data_key(server_key)
         msg += f"Removed saved data for server: {guild.name} ({server_key})"
 
-    print(msg)
+    log(guild, msg)
 
     existing = running_loops.pop(guild.id, None)
     if existing:
         existing.cancel()
 
-async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
+async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries up to max_retries times for any failed request."""
 
@@ -193,15 +195,15 @@ async def fetch_player_stats(session: aiohttp.ClientSession, name: str, platform
                 if isinstance(stats, dict) and "errors" in stats:
                     raise Exception(f"{stats['errors']}")
 
-                print(f"✅ Data fetch successful for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
+                log(guild, f"✅ Data fetch successful for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
                 return stats
 
         except Exception as e:
-            print(f"ERROR! [Attempt {attempt}/{max_retries}] ({name}, {platform}): {e}")
+            log(guild, f"ERROR! [Attempt {attempt}/{max_retries}] ({name}, {platform}): {e}")
             await asyncio.sleep(2 ** attempt)
             continue
 
-    print(f"❌ Data fetch failed for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
+    log(guild, f"❌ Data fetch failed for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
     if channel:
         await channel.send(f"❌ Data fetch failed for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
 
@@ -239,7 +241,7 @@ def get_level_and_rank(stats: dict):
 async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextChannel = None):
     """Finds a role matching rank_name."""
     if not rank_name:
-        print(f"Failed to find rank_name: {rank_name}")
+        log(guild, f"Failed to find rank_name: {rank_name}")
         return None
 
     if hasattr(rank_name, "name") and not isinstance(rank_name, str):
@@ -254,7 +256,7 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
         role = None
 
     if role is None:
-        print('Missing role!')
+        log(guild, 'Missing role!')
         if channel:
             await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
@@ -272,10 +274,10 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
             role_cls = discord.utils.get(guild.roles, name=role_cls)
 
         if role_cls is None or (not hasattr(role_cls, "name") and not isinstance(role_cls, str)):
-            print(f'Returning! role_cls is not a valid role object: {role_cls!r}')
+            log(guild, f'Returning! role_cls is not a valid role object: {role_cls!r}')
             continue
 
-        print(f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
+        log(guild, f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
 
         await member.remove_roles(role_cls, reason='Rank sync - removing role')
 
@@ -285,18 +287,18 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 async def assign_rank_role(member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
-        print('Returning! rank_name is None.')
+        log(guild, 'Returning! rank_name is None.')
         return
 
     guild = member.guild
 
     role = await get_role(guild, rank_name, channel)
     if role is None:
-        print('Returning! Role is None.')
+        log(guild, 'Returning! Role is None.')
         return
 
     if role.position >= guild.me.top_role.position:
-        print(f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
+        log(guild, f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
         if channel:
             await channel.send(f"❌ Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
         return
@@ -304,16 +306,16 @@ async def assign_rank_role(member: discord.Member, rank_name: str, channel: disc
     try:
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            print(f"Assigned {rank_name} to {member.display_name}")
+            log(guild, f"Assigned {rank_name} to {member.display_name}")
             if channel:
                 await channel.send(f"✅ Assigned `{rank_name}` to `{member.display_name}`")
             return
 
     except discord.Forbidden:
-        print(f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
+        log(guild, f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
 
     except discord.HTTPException as e:
-        print(f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+        log(guild, f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession, channel: discord.TextChannel):
     """Update a single member's rank. """
@@ -323,32 +325,31 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
-        print(f"Skipping {member.display_name}: no game account linked (!link needed)")
+        log(guild, f"Skipping {member.display_name}: no game account linked (!link needed)")
         return False
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(session, name, platform, channel)
+    stats = await fetch_player_stats(guild, session, name, platform, channel)
     if stats is None: return False
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        print(f"[WARNING] Could not extract rank for {member.display_name} ({name})")
+        log(guild, f"[WARNING] Could not extract rank for {member.display_name} ({name})")
         if channel:
             await channel.send(f"⚠️ Could not extract rank for {member.mention} ({name})")
         return False
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
-    print(f"discord: {member.display_name} (ea_name: {name} platform: {platform} level: {rankValue} rank name: {concise_rank_name})")
+    log(guild, f"discord: {member.display_name} (ea_name: {name} platform: {platform} level: {rankValue} rank name: {concise_rank_name})")
 
     await assign_rank_role(member, concise_rank_name, channel)
     await remove_rank_role(guild, member, concise_rank_name, channel)
 
     return True
 
-#TODO: fix for single
 @tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
     await bot.wait_until_ready()
@@ -362,25 +363,25 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
         guilds_to_update = list(bot.guilds)
 
     if not guilds_to_update:
-        print('[ERROR] Automatic update skipped: no guilds to update.')
+        log(guild, '[ERROR] Automatic update skipped: no guilds to update.')
         return
 
     async with aiohttp.ClientSession() as session:
-        print(f"[DEBUG] guild_to_update {[getattr(guild, 'name', str(guild)) for guild in guilds_to_update]}")
+        log(guild, f"[DEBUG] guild_to_update {[getattr(guild, 'name', str(guild)) for guild in guilds_to_update]}")
         for target_guild in guilds_to_update:
             report_guild = getattr(report_channel, 'guild', None)
             channel = report_channel if (report_channel is not None and report_guild is not None and report_guild.id == target_guild.id) else None
             if channel is None and load_config().get(str(target_guild.id), {}).get('channel_id'):
                 channel = bot.get_channel(int(load_config().get(str(target_guild.id), {})['channel_id']))
 
-            print(f"[START AUTOMATIC UPDATE] [{target_guild.name}] Interval: {load_config().get(str(target_guild.id), {}).get('update_interval', AUTO_UPDATE_TIMER_HOURS)} hours")
+            log(guild, f"[START AUTOMATIC UPDATE] [{target_guild.name}] Interval: {load_config().get(str(target_guild.id), {}).get('update_interval', AUTO_UPDATE_TIMER_HOURS)} hours")
 
             updated_count = 0
             for member in target_guild.members:
                 if await _update_member(target_guild, member, session, channel):
                     updated_count += 1
 
-            print(f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+            log(guild, f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
 running_loops: dict[int, tasks.Loop] = {}
 
@@ -391,7 +392,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
         guild = bot.get_guild(guild_id)
         if guild is None:
-            print(f"[ERROR] Guild {guild_id} no longer accessible, stopping its update loop.")
+            log(guild, f"[ERROR] Guild {guild_id} no longer accessible, stopping its update loop.")
             _loop.cancel()
             return
 
@@ -400,7 +401,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         if guild_config.get('channel_id'):
             channel = bot.get_channel(int(guild_config['channel_id']))
 
-        print(f"[START AUTOMATIC UPDATE] [{guild.name}] Interval: {interval_hours}h")
+        log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}] Interval: {interval_hours}h")
 
         updated_count = 0
         async with aiohttp.ClientSession() as session:
@@ -408,7 +409,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
                 if await _update_member(guild, member, session, channel):
                     updated_count += 1
 
-        print(f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+        log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
     return _loop
 

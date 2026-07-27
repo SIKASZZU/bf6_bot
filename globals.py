@@ -36,6 +36,13 @@ DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
+def log(guild: discord.Guild, message: str):
+    if guild:
+        print(f'[{guild.name}]  {message}')
+        return
+
+    print(message)
+
 def get_conn():
     conn = sqlite3.connect(get_db_path())
     conn.execute(f'''
@@ -52,14 +59,15 @@ def get_conn():
     ''')
     return conn
 
-def load_config():
+def load_config() -> dict:
     conn = get_conn()
     rows = conn.execute(f'SELECT key, value FROM {DB_CONFIG_FILE}').fetchall()
     conn.close()
     return {key: json.loads(value) for key, value in rows}
 
 def save_config(config: dict):
-    if not config:
+    if not isinstance(config, dict):
+        # TODO: figure out how to remove print?
         print('Returning! No config provided for save_config.')
         return
 

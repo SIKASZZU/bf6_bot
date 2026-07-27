@@ -151,7 +151,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         interaction,
         f'🔄 Updating...',
     )
-    print(f'(Updating... arguments: member: {member_name}, update_everybody: {update_everybody})')
+    log(interaction.guild, f'(Updating... arguments: member: {member_name}, update_everybody: {update_everybody})')
 
     target = member or interaction.user
 
@@ -166,7 +166,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                     await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
 
     except Exception as e:
-        print(f"Manual update error: {e}")
+        log(interaction.guild, f"Manual update error: {e}")
         await send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
 
 @bot.command(name="setup-roles")
@@ -205,7 +205,7 @@ async def set_update_interval(ctx, hours: int):
     """Sets the current channel as the target for the 24h stats report."""
 
     if (hours < 1):
-        print(f'Somebody tried to set hours: {hours}')
+        log(ctx.guild, f'Somebody tried to set hours: {hours}')
         ctx.send(f"Try again! Only natural numbers including from 1 and above can be set as interval.")
         return
 
@@ -228,10 +228,10 @@ async def display_links(ctx):
 @bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(ctx):
     msg = _build_unlinked_message(ctx.guild, load_data())
-    print(msg)
+    log(ctx.guild, msg)
     await ctx.send(msg)
 
-def _get_time_to_next_update():
+def _get_time_to_next_update(guild: discord.Guild):
     """Returns the time until the next automatic update in HH:MM:SS format."""
     try:
         if hasattr(update_all_players, 'next_iteration') and update_all_players.next_iteration:
@@ -249,7 +249,7 @@ def _get_time_to_next_update():
                 return f"{hours}h {minutes}m {seconds}s"
 
     except Exception as e:
-        print(f"Error calculating next update time: {e}")
+        log(guild, f"Error calculating next update time: {e}")
     return "Unknown"
 
 @bot.command(name='info')
@@ -276,7 +276,7 @@ async def display_info(ctx):
     )
 
     # Update Timer
-    time_to_update = _get_time_to_next_update()
+    time_to_update = _get_time_to_next_update(ctx.guild)
     embed.add_field(
         name="⏱️ Update Status",
         value=f"Updates every **{update_interval}h**\nNext update: {time_to_update}",
@@ -393,7 +393,7 @@ async def show_time_to_update(ctx):
     config = load_config()
     guild_config = config.get(str(ctx.guild.id), {})
     update_interval = guild_config.get('update_interval', 1)
-    time_left = _get_time_to_next_update()
+    time_left = _get_time_to_next_update(ctx.guild)
 
     embed = discord.Embed(
         title="⏰ Next Update",

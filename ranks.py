@@ -1,4 +1,5 @@
 import discord
+from globals import log
 
 # have this shit in desecending order meaning highest list value is the first entry in dict etc
 # else removing role breaks
@@ -49,8 +50,8 @@ async def create_roles(guild: discord.Guild):
             )
             created.append(rank_name)
         except discord.Forbidden:
-            print(f"Missing permissions to create role: {rank_name}")
+            log(guild, f"Missing permissions to create role: {rank_name}")
         except discord.HTTPException as e:
-            print(f"Failed to create role {rank_name}: {e}")
+            log(guild, f"Failed to create role {rank_name}: {e}")
 
     return created, skipped
