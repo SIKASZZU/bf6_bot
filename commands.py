@@ -54,7 +54,7 @@ def _build_commands_help_message():
     return message
 
 def _build_links_message(guild: discord.Guild, data: dict) -> str:
-    server_data = data.get(str(guild.id), {})
+    server_data = data.get(str(guild.id))
 
     if not server_data:
         return "No linked accounts found for this server in the database."
@@ -71,15 +71,8 @@ def _build_links_message(guild: discord.Guild, data: dict) -> str:
         lines.append(f"- {display}: {name} ({platform})")
     return "\n".join(lines)
 
-def _build_unlinked_message(guild_id, data):
-    server_data = data.get(str(guild_id), {})
-
-    if not server_data:
-        return "No linked accounts found for this server in the database."
-
-    guild = bot.get_guild(guild_id)
-    if guild is None:
-        return "Could not find this server in the bot's cache."
+def _build_unlinked_message(guild: discord.Guild, data: dict) -> str:
+    server_data = data.get(str(guild.id))
 
     lines = ["Unlinked accounts for this server:"]
 
@@ -233,7 +226,7 @@ async def display_links(ctx):
 
 @bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(ctx):
-    msg = _build_unlinked_message(ctx.guild.id, load_data())
+    msg = _build_unlinked_message(ctx.guild, load_data())
     print(msg)
     await ctx.send(msg)
 
