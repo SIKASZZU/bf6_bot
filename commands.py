@@ -18,8 +18,14 @@ def _get_tree_commands():
     return list(getattr(bot.tree, 'commands', []))
 
 def _build_commands_help_message():
-    lines = ["**All commands:**"]
-    admin_lines = ["**Administrator only:**"]
+    embed = discord.Embed(
+        title="📋 All commands",
+        color=discord.Color.blue()
+    )
+
+    admin_fields = []
+    normal_fields = []
+    
     seen_names = set()
 
     for cmd in list(bot.commands) + _get_tree_commands():
@@ -37,29 +43,35 @@ def _build_commands_help_message():
         )
 
         prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
-        line = f"{prefix}{name}"
-
-        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None)
-        if help_text:
-            line += f" — {help_text}"
+        
+        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
+        field_value = f"{prefix}{name} — {help_text}"
 
         if is_admin:
-            admin_lines.append(line)
+            admin_fields.append(field_value)
         else:
-            lines.append(line)
+            normal_fields.append(field_value)
 
-    message = "\n".join(lines)
-    if admin_lines:
-        message += "\n\n" + "\n".join(admin_lines)
-    return message
+    if normal_fields:
+        embed.add_field(name="User Commands", value="\n".join(normal_fields), inline=False)
+    if admin_fields:
+        embed.add_field(name="Administrator Commands", value="\n".join(admin_fields), inline=False)
+        
+    return embed
 
-def _build_links_message(guild: discord.Guild, data: dict) -> str:
+def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    if not server_data:
-        return "No linked accounts found for this server in the database."
+    embed = discord.Embed(
+        title="📊 Linked accounts",
+        color=discord.Color.blue()
+    )
 
-    lines = [f"Linked accounts for this server:"]
+    if not server_data:
+        embed.description = "No linked accounts found for this server in the database."
+        return embed
+
+    lines = []
 
     for discord_id, entry in server_data.items():
         name = entry.get('name', 'unknown')
@@ -68,21 +80,32 @@ def _build_links_message(guild: discord.Guild, data: dict) -> str:
         member = guild.get_member(int(discord_id))
         display = member.display_name if member else f"<left server> ({discord_id})"
 
-        lines.append(f"- {display}: {name} ({platform})")
-    return "\n".join(lines)
+        lines.append(f"{display}: {name} ({platform})")
+    
+    embed.description = "\n".join(lines)
+    return embed
 
-def _build_unlinked_message(guild: discord.Guild, data: dict) -> str:
+def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    lines = ["Unlinked accounts for this server:"]
+    embed = discord.Embed(
+        title="👥 Unlinked members",
+        color=discord.Color.orange()
+    )
 
+    lines = []
+    
     for member in guild.members:
         if member.bot:
             continue
         if str(member.id) not in server_data.keys():
-            lines.append(f"- {member}")
+            lines.append(f"{member}")
 
-    return "\n".join(lines)
+    if not lines:
+        embed.description = "All members are linked!"
+    else:
+        embed.description = "\n".join(lines)
+    return embed
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
 @app_commands.describe(
@@ -174,14 +197,21 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 async def setup_roles(ctx):
     created, skipped = await create_roles(ctx.guild)
 
-    msg = ""
-    if created:
-        msg += f"✅ Created roles: \n{',\n'.join(created)}\n"
+    embed = discord.Embed(
+        title="⚙️ Role Setup",
+        color=discord.Color.green()
+    )
 
-    if skipped:
-        msg += f"✅ Already existed: {', '.join(skipped)}\n"
+    if not created and not skipped:
+        embed.description = "❌ Something went wrong trying to create roles."
+        embed.color = discord.Color.red()
+    else:
+        if created:
+            embed.add_field(name="✅ Created roles", value=", ".join(created), inline=False)
+        if skipped:
+            embed.add_field(name="✅ Already existed", value=", ".join(skipped), inline=False)
 
-    await ctx.send(msg or "❌ Something went wrong trying to create roles.")
+    await ctx.send(embed=embed)
 
 @bot.command(name="set-channel")
 @commands.has_permissions(administrator=True)
@@ -206,7 +236,12 @@ async def set_update_interval(ctx, hours: int):
 
     if (hours < 1):
         log(ctx.guild, f'Somebody tried to set hours: {hours}')
-        ctx.send(f"Try again! Only natural numbers including from 1 and above can be set as interval.")
+        embed = discord.Embed(
+            title="❌ Error",
+            description="Try again! Only natural numbers including from 1 and above can be set as interval.",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
         return
 
     config = load_config()
@@ -214,22 +249,27 @@ async def set_update_interval(ctx, hours: int):
     save_config(config)
 
     restart_guild_update_loop(ctx.guild)
-    # update_all_players.change_interval(hours=hours)
-    await ctx.send(f"✅ Done! The update interval is now {hours} hours.")
+    
+    embed = discord.Embed(
+        title="✅ Done!",
+        description=f"The update interval is now {hours} hours.",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 
 @bot.command(name="commands")
 async def display_commands(ctx):
-    await ctx.send(_build_commands_help_message())
+    await ctx.send(embed=_build_commands_help_message())
 
 @bot.command(name="links", description=f'Have all the links be displayed.')
 async def display_links(ctx):
-    await ctx.send(_build_links_message(ctx.guild, load_data()))
+    await ctx.send(embed=_build_links_message(ctx.guild, load_data()))
 
 @bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(ctx):
-    msg = _build_unlinked_message(ctx.guild, load_data())
-    log(ctx.guild, msg)
-    await ctx.send(msg)
+    embed = _build_unlinked_message(ctx.guild, load_data())
+    log(ctx.guild, embed.description)
+    await ctx.send(embed=embed)
 
 def _get_time_to_next_update(guild: discord.Guild):
     try:
@@ -369,7 +409,12 @@ async def unlink_member(ctx, member: discord.Member):
     member_key = str(member.id)
 
     if guild_key not in data or member_key not in data[guild_key]:
-        await ctx.send(f"❌ {member.mention} is not linked to any account.")
+        embed = discord.Embed(
+            title="❌ Error",
+            description=f"{member.mention} is not linked to any account.",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed)
         return
 
     # Store the removed entry for confirmation
@@ -383,7 +428,12 @@ async def unlink_member(ctx, member: discord.Member):
     else:
         account_name = removed_entry
 
-    await ctx.send(f"✅ Unlinked {member.mention} from account `{account_name}`")
+    embed = discord.Embed(
+        title="✅ Account unlinked",
+        description=f"Unlinked {member.mention} from account `{account_name}`",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 
 @bot.command(name='time-to-update')
 async def show_time_to_update(ctx):
@@ -414,7 +464,8 @@ async def test_role_assignment(ctx, rank_name: str, member: discord.Member = Non
     target = member or ctx.author
 
     if not rank_name:
-        await ctx.send("❌ Please provide a rank name to test (e.g., 'Private', 'Corporal', 'Sergeant').")
+        embed = discord.Embed(title="❌ Error", description="Please provide a rank name to test (e.g., 'Private', 'Corporal', 'Sergeant').", color=discord.Color.red())
+        await ctx.send(embed=embed)
         return
 
     # Get rank roles available
@@ -422,27 +473,34 @@ async def test_role_assignment(ctx, rank_name: str, member: discord.Member = Non
     available_ranks = list(get_role_dict().keys())
 
     if rank_name not in available_ranks:
-        await ctx.send(f"❌ Invalid rank: `{rank_name}`. Available ranks: {', '.join(available_ranks)}")
+        embed = discord.Embed(title="❌ Invalid rank", description=f"Available ranks: {', '.join(available_ranks)}", color=discord.Color.red())
+        await ctx.send(embed=embed)
         return
 
     # Get the role
     role = discord.utils.get(ctx.guild.roles, name=rank_name)
     if not role:
-        await ctx.send(f"❌ Role `{rank_name}` not found. Did you run `{COMMAND_PREFIX}setup-roles`?")
+        embed = discord.Embed(title="❌ Role not found", description=f"Role `{rank_name}` not found. Did you run `{COMMAND_PREFIX}setup-roles`?", color=discord.Color.red())
+        await ctx.send(embed=embed)
         return
 
     # Test assignment
     try:
         if ctx.guild.me.top_role.position <= role.position:
-            await ctx.send(f"❌ Bot's top role is too low to assign `{rank_name}`. Please move the bot's role higher in the role hierarchy.")
+            embed = discord.Embed(title="❌ Bot permission error", description=f"Bot's top role is too low to assign `{rank_name}`. Please move the bot's role higher in the role hierarchy.", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
 
         if role in target.roles:
-            await ctx.send(f"ℹ️ {target.mention} already has the `{rank_name}` role.")
+            embed = discord.Embed(title="ℹ️ Already assigned", description=f"{target.mention} already has the `{rank_name}` role.", color=discord.Color.blue())
+            await ctx.send(embed=embed)
         else:
             await target.add_roles(role)
-            await ctx.send(f"✅ Successfully assigned `{rank_name}` role to {target.mention}. Role assignment is working!")
+            embed = discord.Embed(title="✅ Role assigned", description=f"Successfully assigned `{rank_name}` role to {target.mention}. Role assignment is working!", color=discord.Color.green())
+            await ctx.send(embed=embed)
     except discord.Forbidden:
-        await ctx.send(f"❌ Missing permissions to assign role `{rank_name}`.")
+        embed = discord.Embed(title="❌ Missing permissions", description=f"Missing permissions to assign role `{rank_name}`.", color=discord.Color.red())
+        await ctx.send(embed=embed)
     except Exception as e:
-        await ctx.send(f"❌ Error during role assignment: {e}")
+        embed = discord.Embed(title="❌ Error", description=f"Error during role assignment: {e}", color=discord.Color.red())
+        await ctx.send(embed=embed)
