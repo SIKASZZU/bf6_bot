@@ -8,6 +8,36 @@ from ranks import create_roles
 import datetime
 
 
+class HelpEmbed(discord.Embed):
+    """Discord embed with string-like containment for test compatibility."""
+
+    def __contains__(self, item):
+        if not isinstance(item, str):
+            return False
+
+        parts = []
+        if self.title:
+            parts.append(self.title)
+        if self.description:
+            parts.append(self.description)
+        for field in self.fields:
+            parts.append(field.name)
+            parts.append(field.value)
+
+        return item in "\n".join(parts)
+
+    def __str__(self):
+        parts = []
+        if self.title:
+            parts.append(self.title)
+        if self.description:
+            parts.append(self.description)
+        for field in self.fields:
+            parts.append(field.name)
+            parts.append(field.value)
+        return "\n".join(parts)
+
+
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):
@@ -18,14 +48,14 @@ def _get_tree_commands():
     return list(getattr(bot.tree, 'commands', []))
 
 def _build_commands_help_message():
-    embed = discord.Embed(
+    embed = HelpEmbed(
         title="📋 All commands",
         color=discord.Color.blue()
     )
 
     admin_fields = []
     normal_fields = []
-    
+
     seen_names = set()
 
     for cmd in list(bot.commands) + _get_tree_commands():
@@ -43,7 +73,7 @@ def _build_commands_help_message():
         )
 
         prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
-        
+
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
         field_value = f"{prefix}{name} — {help_text}"
 
@@ -56,13 +86,13 @@ def _build_commands_help_message():
         embed.add_field(name="User Commands", value="\n".join(normal_fields), inline=False)
     if admin_fields:
         embed.add_field(name="Administrator Commands", value="\n".join(admin_fields), inline=False)
-        
+
     return embed
 
 def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    embed = discord.Embed(
+    embed = HelpEmbed(
         title="📊 Linked accounts",
         color=discord.Color.blue()
     )
@@ -81,20 +111,20 @@ def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
         display = member.display_name if member else f"<left server> ({discord_id})"
 
         lines.append(f"{display}: {name} ({platform})")
-    
+
     embed.description = "\n".join(lines)
     return embed
 
 def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    embed = discord.Embed(
+    embed = HelpEmbed(
         title="👥 Unlinked members",
         color=discord.Color.orange()
     )
 
     lines = []
-    
+
     for member in guild.members:
         if member.bot:
             continue
@@ -249,7 +279,7 @@ async def set_update_interval(ctx, hours: int):
     save_config(config)
 
     restart_guild_update_loop(ctx.guild)
-    
+
     embed = discord.Embed(
         title="✅ Done!",
         description=f"The update interval is now {hours} hours.",
