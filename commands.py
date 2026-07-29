@@ -8,36 +8,6 @@ from ranks import create_roles
 import datetime
 
 
-class HelpEmbed(discord.Embed):
-    """Discord embed with string-like containment for test compatibility."""
-
-    def __contains__(self, item):
-        if not isinstance(item, str):
-            return False
-
-        parts = []
-        if self.title:
-            parts.append(self.title)
-        if self.description:
-            parts.append(self.description)
-        for field in self.fields:
-            parts.append(field.name)
-            parts.append(field.value)
-
-        return item in "\n".join(parts)
-
-    def __str__(self):
-        parts = []
-        if self.title:
-            parts.append(self.title)
-        if self.description:
-            parts.append(self.description)
-        for field in self.fields:
-            parts.append(field.name)
-            parts.append(field.value)
-        return "\n".join(parts)
-
-
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):
@@ -47,8 +17,8 @@ def _get_tree_commands():
             return []
     return list(getattr(bot.tree, 'commands', []))
 
-def _build_commands_help_message():
-    embed = HelpEmbed(
+def _build_commands_message():
+    embed = discord.Embed(
         title="📋 All commands",
         color=discord.Color.blue()
     )
@@ -92,7 +62,7 @@ def _build_commands_help_message():
 def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    embed = HelpEmbed(
+    embed = discord.Embed(
         title="📊 Linked accounts",
         color=discord.Color.blue()
     )
@@ -118,7 +88,7 @@ def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
 def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    embed = HelpEmbed(
+    embed = discord.Embed(
         title="👥 Unlinked members",
         color=discord.Color.orange()
     )
@@ -289,7 +259,7 @@ async def set_update_interval(ctx, hours: int):
 
 @bot.command(name="commands")
 async def display_commands(ctx):
-    await ctx.send(embed=_build_commands_help_message())
+    await ctx.send(embed=_build_commands_message())
 
 @bot.command(name="links", description=f'Have all the links be displayed.')
 async def display_links(ctx):
