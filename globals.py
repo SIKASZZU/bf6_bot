@@ -2,6 +2,7 @@ import discord
 import json
 import sqlite3
 import os
+import sys
 from discord.ext import commands
 from urllib.parse import urlencode
 
@@ -26,6 +27,8 @@ def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
 
+API_MAX_RETRIES = 3
+
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
 
@@ -33,6 +36,12 @@ VALID_PLATFORMS = {'EA'}
 DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 1
+
+def log(guild: discord.Guild, message: str):
+    def get_caller() -> str:
+        try: return sys._getframe(2).f_code.co_name
+        except ValueError: return "Unknown"
+    print(f'[server:{guild.name if guild else 'Unknown'}] (func:{get_caller()}) msg: {message}')
 
 def get_conn():
     conn = sqlite3.connect(get_db_path())
@@ -50,14 +59,15 @@ def get_conn():
     ''')
     return conn
 
-def load_config():
+def load_config() -> dict:
     conn = get_conn()
     rows = conn.execute(f'SELECT key, value FROM {DB_CONFIG_FILE}').fetchall()
     conn.close()
     return {key: json.loads(value) for key, value in rows}
 
 def save_config(config: dict):
-    if not config:
+    if not isinstance(config, dict):
+        # TODO: figure out how to remove print?
         print('Returning! No config provided for save_config.')
         return
 
@@ -67,5 +77,17 @@ def save_config(config: dict):
             f'INSERT OR REPLACE INTO {DB_CONFIG_FILE} (key, value) VALUES (?, ?)',
             (key, json.dumps(value))
         )
+    conn.commit()
+    conn.close()
+
+def delete_config_key(server_key: str):
+    conn = get_conn()
+    conn.execute(f'DELETE FROM {DB_CONFIG_FILE} WHERE key = ?', (server_key,))
+    conn.commit()
+    conn.close()
+
+def delete_data_key(server_key: str):
+    conn = get_conn()
+    conn.execute(f'DELETE FROM {DB_DATA_FILE} WHERE key = ?', (server_key,))
     conn.commit()
     conn.close()
