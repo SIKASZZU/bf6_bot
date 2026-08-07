@@ -181,9 +181,7 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries up to max_retries times for any failed request."""
 
-    max_retries = API_MAX_RETRIES
-
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(1, API_MAX_RETRIES + 1):
         try:
             API_URL = build_api_url(name, platform)
             async with session.get(API_URL) as response:
@@ -194,18 +192,12 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
 
                 if isinstance(stats, dict) and "errors" in stats:
                     raise Exception(f"{stats['errors']}")
-
-                log(guild, f"✅ Data fetch successful for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
                 return stats
 
         except Exception as e:
-            log(guild, f"ERROR! [Attempt {attempt}/{max_retries}] ({name}, {platform}): {e}")
+            log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {e}")
             await asyncio.sleep(2 ** attempt)
             continue
-
-    log(guild, f"❌ Data fetch failed for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
-    if channel:
-        await channel.send(f"❌ Data fetch failed for ({name}, {platform}). ({attempt}/{max_retries}) attempts.")
 
     return None
 
@@ -332,18 +324,24 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
     stats = await fetch_player_stats(guild, session, name, platform, channel)
-    if stats is None: return False
+
+    if stats is None:
+        log(guild, f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
+        return False
+
+    else:
+        log(guild, f"✅ Data fetch successful for discord: {member.display_name}, link: {name}, {platform}.")
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        log(guild, f"[WARNING] Could not extract rank for {member.display_name} ({name})")
+        log(guild, f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
         if channel:
-            await channel.send(f"⚠️ Could not extract rank for {member.mention} ({name})")
+            await channel.send(f"⚠️ Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
         return False
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
-    log(guild, f"discord: {member.display_name} (ea_name: {name} platform: {platform} level: {rankValue} rank name: {concise_rank_name})")
+    log(guild, f"discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
     await assign_rank_role(member, concise_rank_name, channel)
     await remove_rank_role(guild, member, concise_rank_name, channel)
