@@ -27,7 +27,9 @@ def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
 
-API_MAX_RETRIES = 3
+# have more shots at api if productino mode
+# may cause some limits but i dont know before not trying
+API_MAX_RETRIES = 3 if DEV_MODE else 6
 
 DB_DATA_FILE    = 'data'
 DB_CONFIG_FILE  = 'config'
