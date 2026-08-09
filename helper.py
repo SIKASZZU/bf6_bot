@@ -262,6 +262,9 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_guild_join(guild):
+    bot.tree.copy_global_to(guild=guild)
+    await bot.tree.sync(guild=guild)
+
     config = load_config()
     server_key = str(guild.id)
 
