@@ -1,6 +1,6 @@
 import unittest
 
-from commands import send_interaction_message
+import helper
 
 
 class FakeResponse:
@@ -33,7 +33,7 @@ class TestInteractionResponse(unittest.IsolatedAsyncioTestCase):
     async def test_uses_followup_when_interaction_already_responded(self):
         interaction = FakeInteraction(is_done=True)
 
-        await send_interaction_message(interaction, "hello")
+        await helper.send_interaction_message(interaction, "hello")
 
         self.assertEqual(interaction.followup.messages[0][0], "hello")
         self.assertEqual(interaction.response.messages, [])
@@ -41,7 +41,7 @@ class TestInteractionResponse(unittest.IsolatedAsyncioTestCase):
     async def test_uses_response_when_interaction_not_yet_responded(self):
         interaction = FakeInteraction(is_done=False)
 
-        await send_interaction_message(interaction, "hello")
+        await helper.send_interaction_message(interaction, "hello")
 
         self.assertEqual(interaction.response.messages[0][0], "hello")
         self.assertEqual(interaction.followup.messages, [])
