@@ -3,6 +3,7 @@ import aiohttp
 import time
 from discord.ext import commands, tasks
 import asyncio
+import datetime
 
 from globals import *
 from ranks import getRankNameFromCareerRank, get_role_dict
@@ -128,6 +129,26 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
         embed.description = "\n".join(lines)
     return embed
 
+
+def _get_time_to_next_update(guild: discord.Guild):
+    try:
+        loop = running_loops.get(guild.id)
+        if loop and loop.next_iteration:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            time_left = loop.next_iteration - now
+
+            total_seconds = int(time_left.total_seconds())
+            if total_seconds < 0:
+                return "Starting soon..."
+
+            hours, remainder = divmod(total_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours}h {minutes}m {seconds}s"
+
+    except Exception as e:
+        print(f"Error calculating next update time: {e}")
+    return "Unknown"
+
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
     if interaction.response.is_done():
@@ -202,8 +223,8 @@ async def on_command_error(ctx, error):
     to the channel instead of letting the traceback go unseen in the console.
     """
 
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ You don't have permission to use this command.")
+    if isinstance(error, (commands.MissingPermissions, commands.MissingRole, commands.MissingAnyRole)):
+        await ctx.send(f"❌ You don't have permission to use this command. Try again in {error.retry_after:.1f}s")
         return
 
     # arva ara kuidas muuta retry_after v22rtus
@@ -481,7 +502,6 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
 
             log(guild, f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
-# TODO: helperi?
 running_loops: dict[int, tasks.Loop] = {}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:

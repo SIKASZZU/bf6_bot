@@ -1,17 +1,16 @@
-from discord.ext import commands
 from discord import app_commands
 import aiohttp
 
 from globals import *
 import helper
 from ranks import create_roles
-import datetime
 
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
+@app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
     name=f'The {DEFAULT_PLATFORM} account name',
-    member='Admin only: link discord member\'s account to name'
+    member='Discord member'
 )
 async def link(interaction: discord.Interaction, name: str, member: discord.Member = None):
 
@@ -53,9 +52,10 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     await force_update.callback(interaction, member=target, update_everybody=False)
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
+@app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
-    member='Admin only: link discord member\'s account to name',
-    update_everybody='Admin only: update all members that have been linked.'
+    member='Discord member',
+    update_everybody='Update all members that have been linked.'
 )
 async def force_update(interaction: discord.Interaction, member: discord.Member = None, update_everybody: bool = False):
     """Manually forces update on member. """
@@ -94,8 +94,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         log(interaction.guild, f"Manual update error: {e}")
         await helper.send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
 
-@bot.command(name="setup-roles")
-@commands.has_permissions(administrator=True)
+@bot.tree.command(name="setup-roles", description='Creates all possible career rank roles for bot to assign.')
+@app_commands.checks.has_permissions(administrator=True)
 async def setup_roles(ctx):
     created, skipped = await create_roles(ctx.guild)
 
@@ -115,11 +115,9 @@ async def setup_roles(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command(name="set-channel")
-@commands.has_permissions(administrator=True)
+@bot.tree.command(name="set-channel", description='Bot will default to talking to this the set channel.')
+@app_commands.checks.has_permissions(administrator=True)
 async def set_channel(ctx):
-    """Sets the current channel as the target for the 24h stats report."""
-
     config = load_config()
     config.setdefault(str(ctx.guild.id), {})["channel_id"] = ctx.channel.id
     save_config(config)
@@ -131,11 +129,9 @@ async def set_channel(ctx):
     )
     await ctx.send(embed=success_embed)
 
-@bot.command(name="set-update-interval")
-@commands.has_permissions(administrator=True)
+@bot.tree.command(name="set-update-interval", description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
+@app_commands.checks.has_permissions(administrator=True)
 async def set_update_interval(ctx, hours: int):
-    """Sets the current channel as the target for the 24h stats report."""
-
     if (hours < 1):
         log(ctx.guild, f'Somebody tried to set hours: {hours}')
         embed = discord.Embed(
@@ -159,42 +155,26 @@ async def set_update_interval(ctx, hours: int):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name="commands")
+@bot.tree.command(name="commands", description='Display all the commands possible.')
+@app_commands.checks.has_permissions(administrator=True)
 async def display_commands(ctx):
     await ctx.send(embed=helper._build_commands_message())
 
-@bot.command(name="links", description=f'Have all the links be displayed.')
+@bot.tree.command(name="links", description=f'Have all the links be displayed.')
+@app_commands.checks.has_permissions(administrator=True)
 async def display_links(ctx):
     await ctx.send(embed=helper._build_links_message(ctx.guild, helper.load_data()))
 
-@bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
+@bot.tree.command(name='unlinks', description=f'Have all the unlinked members be displayed.')
+@app_commands.checks.has_permissions(administrator=True)
 async def display_unlinks(ctx):
     embed = helper._build_unlinked_message(ctx.guild, helper.load_data())
     log(ctx.guild, embed.description)
     await ctx.send(embed=embed)
 
-def _get_time_to_next_update(guild: discord.Guild):
-    try:
-        loop = helper.running_loops.get(guild.id)
-        if loop and loop.next_iteration:
-            now = datetime.datetime.now(datetime.timezone.utc)
-            time_left = loop.next_iteration - now
-
-            total_seconds = int(time_left.total_seconds())
-            if total_seconds < 0:
-                return "Starting soon..."
-
-            hours, remainder = divmod(total_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            return f"{hours}h {minutes}m {seconds}s"
-
-    except Exception as e:
-        print(f"Error calculating next update time: {e}")
-    return "Unknown"
-
-@bot.command(name='info')
+@bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
+@app_commands.checks.has_permissions(administrator=True)
 async def display_info(ctx):
-    """Sends comprehensive information about the bot and how to use it."""
     config = load_config()
     guild_config = config.get(str(ctx.guild.id), {})
     data = helper.load_data()
@@ -216,7 +196,7 @@ async def display_info(ctx):
     )
 
     # Update Timer
-    time_to_update = _get_time_to_next_update(ctx.guild)
+    time_to_update = helper._get_time_to_next_update(ctx.guild)
     embed.add_field(
         name="⏱️ Update Status",
         value=f"Updates every **{update_interval}h**\nNext update: {time_to_update}",
@@ -261,7 +241,8 @@ async def display_info(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command(name='setup', aliases=['instructions'])
+@bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
+@app_commands.checks.has_permissions(administrator=True)
 async def display_setup(ctx):
     """Sends detailed setup instructions."""
     embed = discord.Embed(
@@ -302,10 +283,12 @@ async def display_setup(ctx):
 
     await ctx.send(embed=embed)
 
-@bot.command(name='unlink')
-@commands.has_permissions(administrator=True)
+@bot.tree.command(name='unlink', description="Unlink a member's Discord account from their game account.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    member='Discord member'
+    )
 async def unlink_member(ctx, member: discord.Member):
-    """Unlink a member's Discord account from their game account."""
     data = helper.load_data()
     guild_key = str(ctx.guild.id)
     member_key = str(member.id)
@@ -337,13 +320,13 @@ async def unlink_member(ctx, member: discord.Member):
     )
     await ctx.send(embed=embed)
 
-@bot.command(name='time-to-update')
+@bot.tree.command(name='time-to-update', description='Shows the time until the next automatic update.')
+@app_commands.checks.has_permissions(administrator=True)
 async def show_time_to_update(ctx):
-    """Shows the time until the next automatic update."""
     config = load_config()
     guild_config = config.get(str(ctx.guild.id), {})
     update_interval = guild_config.get('update_interval', 1)
-    time_left = _get_time_to_next_update(ctx.guild)
+    time_left = helper._get_time_to_next_update(ctx.guild)
 
     embed = discord.Embed(
         title="⏰ Next Update",
@@ -354,15 +337,13 @@ async def show_time_to_update(ctx):
 
     await ctx.send(embed=embed)
 
-# @bot.command(name='supported-platforms')
-# async def display_supported_playforms(ctx):
-#     """ Sends a message to channel containing information about and use cases of bot."""
-#     await ctx.send(f"Default platform: {DEFAULT_PLATFORM} \n All supported: {', '.join(sorted(VALID_PLATFORMS))}")
-
-@bot.command(name='test-role')
-@commands.has_permissions(administrator=True)
+@bot.tree.command(name='test-role', description='Test role assignment on a member. Useful for troubleshooting.')
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    rank_name = 'Type the rank name you want to set',
+    member = 'Discord member'
+)
 async def test_role_assignment(ctx, rank_name: str, member: discord.Member = None):
-    """Test role assignment on a member. Useful for troubleshooting."""
     target = member or ctx.author
 
     if not rank_name:
@@ -406,3 +387,8 @@ async def test_role_assignment(ctx, rank_name: str, member: discord.Member = Non
     except Exception as e:
         embed = discord.Embed(title="❌ Error", description=f"Error during role assignment: {e}", color=discord.Color.red())
         await ctx.send(embed=embed)
+
+# @bot.command(name='supported-platforms')
+# async def display_supported_playforms(ctx):
+#     """ Sends a message to channel containing information about and use cases of bot."""
+#     await ctx.send(f"Default platform: {DEFAULT_PLATFORM} \n All supported: {', '.join(sorted(VALID_PLATFORMS))}")

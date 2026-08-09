@@ -1,6 +1,6 @@
 import unittest
 import discord
-
+from commands import *
 import helper
 
 
@@ -39,7 +39,7 @@ class TestCommandHelpMessages(unittest.TestCase):
     def test_build_commands_message_includes_slash_commands(self):
         message = helper._build_commands_message()
 
-        self.assertInEmbed('!commands', message)
+        self.assertInEmbed('/commands', message)
         self.assertInEmbed('/link', message)
         self.assertInEmbed('/update', message)
 
