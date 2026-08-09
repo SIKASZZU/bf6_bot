@@ -8,6 +8,7 @@ from ranks import create_roles
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 @app_commands.describe(
     name=f'The {DEFAULT_PLATFORM} account name',
     member='Discord member'
@@ -53,6 +54,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member',
     update_everybody='Update all members that have been linked.'
@@ -96,6 +98,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
 @bot.tree.command(name="setup-roles", description='Creates all possible career rank roles for bot to assign.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def setup_roles(ctx):
     created, skipped = await create_roles(ctx.guild)
 
@@ -117,6 +120,7 @@ async def setup_roles(ctx):
 
 @bot.tree.command(name="set-channel", description='Bot will default to talking to this the set channel.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def set_channel(ctx):
     config = load_config()
     config.setdefault(str(ctx.guild.id), {})["channel_id"] = ctx.channel.id
@@ -131,6 +135,7 @@ async def set_channel(ctx):
 
 @bot.tree.command(name="set-update-interval", description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def set_update_interval(ctx, hours: int):
     if (hours < 1):
         log(ctx.guild, f'Somebody tried to set hours: {hours}')
@@ -157,16 +162,19 @@ async def set_update_interval(ctx, hours: int):
 
 @bot.tree.command(name="commands", description='Display all the commands possible.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def display_commands(ctx):
     await ctx.send(embed=helper._build_commands_message())
 
 @bot.tree.command(name="links", description=f'Have all the links be displayed.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def display_links(ctx):
     await ctx.send(embed=helper._build_links_message(ctx.guild, helper.load_data()))
 
 @bot.tree.command(name='unlinks', description=f'Have all the unlinked members be displayed.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def display_unlinks(ctx):
     embed = helper._build_unlinked_message(ctx.guild, helper.load_data())
     log(ctx.guild, embed.description)
@@ -174,6 +182,7 @@ async def display_unlinks(ctx):
 
 @bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def display_info(ctx):
     config = load_config()
     guild_config = config.get(str(ctx.guild.id), {})
@@ -243,6 +252,7 @@ async def display_info(ctx):
 
 @bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def display_setup(ctx):
     """Sends detailed setup instructions."""
     embed = discord.Embed(
@@ -285,6 +295,7 @@ async def display_setup(ctx):
 
 @bot.tree.command(name='unlink', description="Unlink a member's Discord account from their game account.")
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member'
     )
@@ -322,6 +333,7 @@ async def unlink_member(ctx, member: discord.Member):
 
 @bot.tree.command(name='time-to-update', description='Shows the time until the next automatic update.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 async def show_time_to_update(ctx):
     config = load_config()
     guild_config = config.get(str(ctx.guild.id), {})
@@ -339,6 +351,7 @@ async def show_time_to_update(ctx):
 
 @bot.tree.command(name='test-role', description='Test role assignment on a member. Useful for troubleshooting.')
 @app_commands.checks.has_permissions(administrator=True)
+@helper.is_admin_or_has_role()
 @app_commands.describe(
     rank_name = 'Type the rank name you want to set',
     member = 'Discord member'

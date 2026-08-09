@@ -39,6 +39,9 @@ DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
+# TODO: have it check by int somehow id
+PERMISSIONED_ROLE: str = 'Admin'
+
 def log(guild: discord.Guild, message: str):
     def get_caller() -> str:
         try: return sys._getframe(2).f_code.co_name

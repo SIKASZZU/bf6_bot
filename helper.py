@@ -29,7 +29,6 @@ def save_data(data: dict):
     conn.commit()
     conn.close()
 
-
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):
@@ -129,7 +128,6 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
         embed.description = "\n".join(lines)
     return embed
 
-
 def _get_time_to_next_update(guild: discord.Guild):
     try:
         loop = running_loops.get(guild.id)
@@ -171,6 +169,15 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
 
 _last_command_time = 0
 REQUEST_INTERVAL_SECONDS = 2
+
+def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
+    """Passes if the invoking user is a server administrator OR has the given role."""
+    def predicate(ctx: commands.Context) -> bool:
+        if ctx.author.guild_permissions.administrator:
+            return True
+        return discord.utils.get(ctx.author.roles, name=role_name) is not None
+
+    return commands.check(predicate)
 
 @bot.check
 async def global_rate_limit(ctx):
@@ -322,7 +329,6 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
 
     return None
 
-
 def get_level_and_rank(stats: dict):
     """
     Extracts rank/rankName from the bf6 profile response.
@@ -349,7 +355,6 @@ def get_level_and_rank(stats: dict):
     rank_name = profile.get("rankName")
 
     return rank, rank_name
-
 
 async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextChannel = None):
     """Finds a role matching rank_name."""
