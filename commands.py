@@ -3,109 +3,10 @@ from discord import app_commands
 import aiohttp
 
 from globals import *
-from helper import load_data, save_data, update_all_players, _update_member, send_interaction_message, restart_guild_update_loop, running_loops
+import helper
 from ranks import create_roles
 import datetime
 
-
-def _get_tree_commands():
-    tree_commands = getattr(bot.tree, 'get_commands', None)
-    if callable(tree_commands):
-        try:
-            return list(tree_commands())
-        except TypeError:
-            return []
-    return list(getattr(bot.tree, 'commands', []))
-
-def _build_commands_message():
-    embed = discord.Embed(
-        title="📋 All commands",
-        color=discord.Color.blue()
-    )
-
-    admin_fields = []
-    normal_fields = []
-
-    seen_names = set()
-
-    for cmd in list(bot.commands) + _get_tree_commands():
-        if getattr(cmd, 'hidden', False):
-            continue
-
-        name = getattr(cmd, 'name', None)
-        if not name or name in seen_names:
-            continue
-        seen_names.add(name)
-
-        is_admin = any(
-            getattr(check, '__qualname__', '').startswith('has_permissions')
-            for check in getattr(cmd, 'checks', [])
-        )
-
-        prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
-
-        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
-        field_value = f"{prefix}{name} — {help_text}"
-
-        if is_admin:
-            admin_fields.append(field_value)
-        else:
-            normal_fields.append(field_value)
-
-    if normal_fields:
-        embed.add_field(name="User Commands", value="\n".join(normal_fields), inline=False)
-    if admin_fields:
-        embed.add_field(name="Administrator Commands", value="\n".join(admin_fields), inline=False)
-
-    return embed
-
-def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
-    server_data = data.get(str(guild.id))
-
-    embed = discord.Embed(
-        title="📊 Linked accounts",
-        color=discord.Color.blue()
-    )
-
-    if not server_data:
-        embed.description = "No linked accounts found for this server in the database."
-        return embed
-
-    lines = []
-
-    for discord_id, entry in server_data.items():
-        name = entry.get('name', 'unknown')
-        platform = entry.get('platform', DEFAULT_PLATFORM)
-
-        member = guild.get_member(int(discord_id))
-        display = member.display_name if member else f"<left server> ({discord_id})"
-
-        lines.append(f"{display}: {name} ({platform})")
-
-    embed.description = "\n".join(lines)
-    return embed
-
-def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
-    server_data = data.get(str(guild.id))
-
-    embed = discord.Embed(
-        title="👥 Unlinked members",
-        color=discord.Color.orange()
-    )
-
-    lines = []
-
-    for member in guild.members:
-        if member.bot:
-            continue
-        if str(member.id) not in server_data.keys():
-            lines.append(f"{member}")
-
-    if not lines:
-        embed.description = "All members are linked!"
-    else:
-        embed.description = "\n".join(lines)
-    return embed
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
 @app_commands.describe(
@@ -118,32 +19,32 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 
     platform = DEFAULT_PLATFORM
     if platform not in VALID_PLATFORMS:
-        await send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
+        await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
         return
 
     target = member or interaction.user
     # only allow linking someone else if the invoker is an admin
     if member is not None and not interaction.user.guild_permissions.administrator:
-        await send_interaction_message(
+        await helper.send_interaction_message(
             interaction,
             "❌ Only administrators can link accounts for other members.",
             ephemeral=True,
         )
         return
 
-    data = load_data()
+    data = helper.load_data()
     data.setdefault(str(interaction.guild.id), {})[str(target.id)] = {"name": name, "platform": platform}
-    save_data(data)
+    helper.save_data(data)
 
     if target.id == interaction.user.id:
-        await send_interaction_message(interaction, f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
     else:
-        await send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
 
     # Check if report channel is configured
     # config = load_config()
     # if not config.get(str(interaction.guild.id), {}).get('channel_id'):
-    #     await send_interaction_message(
+    #     await helper.send_interaction_message(
     #         interaction,
     #         f"⚠️ **Note:** No report channel is configured! Updates will not be announced. Admin: use `{COMMAND_PREFIX}set-channel` in your desired channel.",
     #         ephemeral=True
@@ -161,7 +62,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     is_admin = interaction.user.guild_permissions.administrator
     if not is_admin and (member is not None or update_everybody):
-        await send_interaction_message(
+        await helper.send_interaction_message(
             interaction,
             "❌ Only administrators can update accounts for other members or for everybody.",
             ephemeral=True,
@@ -170,7 +71,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     member_name = member.display_name if member else "None"
 
-    await send_interaction_message(
+    await helper.send_interaction_message(
         interaction,
         f'🔄 Updating...',
     )
@@ -180,17 +81,18 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     try:
         if update_everybody:
-            await update_all_players(guild=interaction.guild)
-            await send_interaction_message(interaction, "✅ All players stats update completed successfully!")
+            await helper.update_all_players(guild=interaction.guild)
+            await helper.send_interaction_message(interaction, "✅ All players stats update completed successfully!")
 
         else:
             async with aiohttp.ClientSession() as session:
-                if await _update_member(interaction.guild, target, session, channel=interaction.channel):
-                    await send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
+                if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
+                    log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
+                    await helper.send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
 
     except Exception as e:
         log(interaction.guild, f"Manual update error: {e}")
-        await send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
+        await helper.send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
 
 @bot.command(name="setup-roles")
 @commands.has_permissions(administrator=True)
@@ -248,7 +150,7 @@ async def set_update_interval(ctx, hours: int):
     config.setdefault(str(ctx.guild.id), {})['update_interval'] = hours
     save_config(config)
 
-    restart_guild_update_loop(ctx.guild)
+    helper.restart_guild_update_loop(ctx.guild)
 
     embed = discord.Embed(
         title="✅ Done!",
@@ -259,21 +161,21 @@ async def set_update_interval(ctx, hours: int):
 
 @bot.command(name="commands")
 async def display_commands(ctx):
-    await ctx.send(embed=_build_commands_message())
+    await ctx.send(embed=helper._build_commands_message())
 
 @bot.command(name="links", description=f'Have all the links be displayed.')
 async def display_links(ctx):
-    await ctx.send(embed=_build_links_message(ctx.guild, load_data()))
+    await ctx.send(embed=helper._build_links_message(ctx.guild, helper.load_data()))
 
 @bot.command('unlinks', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(ctx):
-    embed = _build_unlinked_message(ctx.guild, load_data())
+    embed = helper._build_unlinked_message(ctx.guild, helper.load_data())
     log(ctx.guild, embed.description)
     await ctx.send(embed=embed)
 
 def _get_time_to_next_update(guild: discord.Guild):
     try:
-        loop = running_loops.get(guild.id)
+        loop = helper.running_loops.get(guild.id)
         if loop and loop.next_iteration:
             now = datetime.datetime.now(datetime.timezone.utc)
             time_left = loop.next_iteration - now
@@ -295,7 +197,7 @@ async def display_info(ctx):
     """Sends comprehensive information about the bot and how to use it."""
     config = load_config()
     guild_config = config.get(str(ctx.guild.id), {})
-    data = load_data()
+    data = helper.load_data()
     linked_count = len(data.get(str(ctx.guild.id), {}))
     update_interval = guild_config.get('update_interval', 1)
     channel_id = guild_config.get('channel_id')
@@ -404,7 +306,7 @@ async def display_setup(ctx):
 @commands.has_permissions(administrator=True)
 async def unlink_member(ctx, member: discord.Member):
     """Unlink a member's Discord account from their game account."""
-    data = load_data()
+    data = helper.load_data()
     guild_key = str(ctx.guild.id)
     member_key = str(member.id)
 
@@ -420,7 +322,7 @@ async def unlink_member(ctx, member: discord.Member):
     # Store the removed entry for confirmation
     removed_entry = data[guild_key][member_key]
     del data[guild_key][member_key]
-    save_data(data)
+    helper.save_data(data)
 
     # Get the account name for the message
     if isinstance(removed_entry, dict):

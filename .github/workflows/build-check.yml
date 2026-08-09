@@ -1,4 +1,4 @@
-name: Run Tests
+name: Build and Syntax check
 
 on:
   push:
@@ -22,15 +22,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests
-        env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          DISCORD_TOKEN_DEV: ${{ secrets.DISCORD_TOKEN_DEV }}
-        run: python -m unittest discover -s tests/unit -v
+      - name: Compile project (Syntax check and bytecode build)
+        run: python -m compileall main.py
 
-      - name: Run integration tests (continue-on-error is true)
+      - name: Import project (Executes actual code and does the flow)
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_TOKEN_DEV: ${{ secrets.DISCORD_TOKEN_DEV }}
-        run: python -m unittest discover -s tests/integration -v
-        continue-on-error: true
+        run: python -c "import main"

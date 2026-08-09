@@ -28,6 +28,106 @@ def save_data(data: dict):
     conn.commit()
     conn.close()
 
+
+def _get_tree_commands():
+    tree_commands = getattr(bot.tree, 'get_commands', None)
+    if callable(tree_commands):
+        try:
+            return list(tree_commands())
+        except TypeError:
+            return []
+    return list(getattr(bot.tree, 'commands', []))
+
+def _build_commands_message():
+    embed = discord.Embed(
+        title="📋 All commands",
+        color=discord.Color.blue()
+    )
+
+    admin_fields = []
+    normal_fields = []
+
+    seen_names = set()
+
+    for cmd in list(bot.commands) + _get_tree_commands():
+        if getattr(cmd, 'hidden', False):
+            continue
+
+        name = getattr(cmd, 'name', None)
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+
+        is_admin = any(
+            getattr(check, '__qualname__', '').startswith('has_permissions')
+            for check in getattr(cmd, 'checks', [])
+        )
+
+        prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
+
+        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
+        field_value = f"{prefix}{name} — {help_text}"
+
+        if is_admin:
+            admin_fields.append(field_value)
+        else:
+            normal_fields.append(field_value)
+
+    if normal_fields:
+        embed.add_field(name="User Commands", value="\n".join(normal_fields), inline=False)
+    if admin_fields:
+        embed.add_field(name="Administrator Commands", value="\n".join(admin_fields), inline=False)
+
+    return embed
+
+def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
+    server_data = data.get(str(guild.id))
+
+    embed = discord.Embed(
+        title="📊 Linked accounts",
+        color=discord.Color.blue()
+    )
+
+    if not server_data:
+        embed.description = "No linked accounts found for this server in the database."
+        return embed
+
+    lines = []
+
+    for discord_id, entry in server_data.items():
+        name = entry.get('name', 'unknown')
+        platform = entry.get('platform', DEFAULT_PLATFORM)
+
+        member = guild.get_member(int(discord_id))
+        display = member.display_name if member else f"<left server> ({discord_id})"
+
+        lines.append(f"{display}: {name} ({platform})")
+
+    embed.description = "\n".join(lines)
+    return embed
+
+def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
+    server_data = data.get(str(guild.id))
+
+    embed = discord.Embed(
+        title="👥 Unlinked members",
+        color=discord.Color.orange()
+    )
+
+    lines = []
+
+    for member in guild.members:
+        if member.bot:
+            continue
+        if str(member.id) not in server_data.keys():
+            lines.append(f"{member}")
+
+    if not lines:
+        embed.description = "All members are linked!"
+    else:
+        embed.description = "\n".join(lines)
+    return embed
+
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
     if interaction.response.is_done():
