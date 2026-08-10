@@ -409,13 +409,11 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         if channel:
             await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
 
-async def assign_rank_role(member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
+async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
         log(guild, 'Returning! rank_name is None.')
         return
-
-    guild = member.guild
 
     role = await get_role(guild, rank_name, channel)
     if role is None:
@@ -476,7 +474,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     log(guild, f"discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
-    await assign_rank_role(member, concise_rank_name, channel)
+    await assign_rank_role(guild, member, concise_rank_name, channel)
     await remove_rank_role(guild, member, concise_rank_name, channel)
 
     return True
@@ -537,10 +535,19 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         updated_count = 0
         async with aiohttp.ClientSession() as session:
             for member in guild.members:
-                if await _update_member(guild, member, session, channel):
-                    updated_count += 1
+                try:
+                    if await _update_member(guild, member, session, channel):
+                        updated_count += 1
+                except Exception as e:
+                    log(guild, f"[ERROR] Failed updating {member.display_name}: {e}")
 
         log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+
+    @_loop.error
+    async def _loop_error(error):
+        log(bot.get_guild(guild_id), f"[FATAL] Update loop crashed: {error}")
+        if not _loop.is_running():
+            _loop.restart()
 
     return _loop
 
