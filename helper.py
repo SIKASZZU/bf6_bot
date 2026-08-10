@@ -479,12 +479,10 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return True
 
-@tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
-    await bot.wait_until_ready()
-
     if guild is not None:
         guilds_to_update = [guild]
+    # try to get guild through channel
     elif report_channel is not None:
         guild_context = getattr(report_channel, 'guild', None)
         guilds_to_update = [guild_context] if guild_context is not None else list(bot.guilds)
@@ -537,12 +535,13 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
         updated_count = 0
         async with aiohttp.ClientSession() as session:
-            for member in guild.members:
-                try:
-                    if await _update_member(guild, member, session, channel):
-                        updated_count += 1
-                except Exception as e:
-                    log(guild, f"[ERROR] Failed updating {member.display_name}: {e}")
+            update_all_players(channel, guild)
+            # for member in guild.members:
+            #     try:
+            #         if await _update_member(guild, member, session, channel):
+            #             updated_count += 1
+            #     except Exception as e:
+            #         log(guild, f"[ERROR] Failed updating {member.display_name}: {e}")
 
         log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
@@ -560,8 +559,7 @@ def start_guild_update_loop(guild: discord.Guild):
     if existing and existing.is_running():
         return
 
-    interval = load_config().get(str(guild.id), {}).get('update_interval', AUTO_UPDATE_TIMER_HOURS)
-    loop = _make_guild_update_loop(guild.id, interval)
+    loop = _make_guild_update_loop(guild.id, load_config().get(str(guild.id), {}).get('update_interval'))
     running_loops[guild.id] = loop
     loop.start()
 
