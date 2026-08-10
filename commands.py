@@ -7,7 +7,6 @@ from ranks import create_roles
 
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 @app_commands.describe(
     name=f'The {DEFAULT_PLATFORM} account name',
@@ -51,7 +50,6 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     await force_update.callback(interaction, member=target, update_everybody=False)
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member',
@@ -94,7 +92,6 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         await helper.send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
 
 @bot.tree.command(name="setup-roles", description='Creates all possible career rank roles for bot to assign.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def setup_roles(interaction: discord.Interaction):
     created, skipped = await create_roles(interaction.guild)
@@ -116,7 +113,6 @@ async def setup_roles(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name="set-channel", description='Bot will default to talking to this the set channel.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
     config = load_config()
@@ -131,7 +127,6 @@ async def set_channel(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name="set-update-interval", description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 @app_commands.describe(
     hours='Updates in set hour interval (minimum 1 hour)'
@@ -161,25 +156,21 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
     await helper.send_interaction_message(interaction, content=success_message)
 
 @bot.tree.command(name="commands", description='Display all the commands possible.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_commands(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_commands_message())
 
 @bot.tree.command(name="links", description=f'Have all the links be displayed.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_links(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_links_message(interaction.guild, helper.load_data()))
 
 @bot.tree.command(name='unlinks', description=f'Have all the unlinked members be displayed.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_unlinks(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_unlinked_message(interaction.guild, helper.load_data()))
 
 @bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_info(interaction: discord.Interaction):
     config = load_config()
@@ -249,7 +240,6 @@ async def display_info(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_setup(interaction: discord.Interaction):
     """Sends detailed setup instructions."""
@@ -292,7 +282,6 @@ async def display_setup(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='unlink', description="Unlink a member's Discord account from their game account.")
-@app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member'
@@ -329,13 +318,10 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     )
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='time-to-update', description='Shows the time until the next automatic update.')
-@app_commands.checks.has_permissions(administrator=True)
+@bot.tree.command(name='time-until-update', description='Shows the time until the next automatic update.')
 @helper.is_admin_or_has_role()
 async def show_time_to_update(interaction: discord.Interaction):
-    config = load_config()
-    guild_config = config.get(str(interaction.guild.id), {})
-    update_interval = guild_config.get('update_interval')
+    guild_config = load_config().get(str(interaction.guild.id))
     time_left = helper._get_time_to_next_update(interaction.guild)
 
     message = discord.Embed(
@@ -343,7 +329,7 @@ async def show_time_to_update(interaction: discord.Interaction):
         description=f"Time remaining: **{time_left}**",
         color=discord.Color.gold()
     )
-    message.add_field(name="Update Interval", value=f"{update_interval} hour(s)", inline=False)
+    message.add_field(name="Update Interval", value=f"{guild_config.get('update_interval')} hour(s)", inline=False)
     await helper.send_interaction_message(interaction, content=message)
 
 # @bot.command(name='supported-platforms')

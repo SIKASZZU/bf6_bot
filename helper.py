@@ -95,13 +95,9 @@ def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
     lines = []
 
     for discord_id, entry in server_data.items():
-        name = entry.get('name', 'unknown')
-        platform = entry.get('platform', DEFAULT_PLATFORM)
-
-        member = guild.get_member(int(discord_id))
-        display = member.display_name if member else f"<left server> ({discord_id})"
-
-        lines.append(f"{display}: {name} ({platform})")
+        lines.append(
+            f"{guild.get_member(int(discord_id)).display_name if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')} ({entry.get('platform', DEFAULT_PLATFORM)})"
+            )
 
     embed.description = "\n".join(lines)
     return embed
@@ -535,7 +531,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
         updated_count = 0
         async with aiohttp.ClientSession() as session:
-            update_all_players(channel, guild)
+            await update_all_players(channel, guild)
             # for member in guild.members:
             #     try:
             #         if await _update_member(guild, member, session, channel):
