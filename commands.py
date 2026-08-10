@@ -102,21 +102,21 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 async def setup_roles(interaction: discord.Interaction):
     created, skipped = await create_roles(interaction.guild)
 
-    embed = discord.Embed(
+    message = discord.Embed(
         title="⚙️ Role Setup",
         color=discord.Color.green()
     )
 
     if not created and not skipped:
-        embed.description = "❌ Something went wrong trying to create roles."
-        embed.color = discord.Color.red()
+        message.description = "❌ Something went wrong trying to create roles."
+        message.color = discord.Color.red()
     else:
         if created:
-            embed.add_field(name="✅ Created roles", value=", ".join(created), inline=False)
+            message.add_field(name="✅ Created roles", value=", ".join(created), inline=False)
         if skipped:
-            embed.add_field(name="✅ Already existed", value=", ".join(skipped), inline=False)
+            message.add_field(name="✅ Already existed", value=", ".join(skipped), inline=False)
 
-    await helper.send_interaction_message(interaction, embed)
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name="set-channel", description='Bot will default to talking to this the set channel.')
 @app_commands.checks.has_permissions(administrator=True)
@@ -126,12 +126,12 @@ async def set_channel(interaction: discord.Interaction):
     config.setdefault(str(interaction.guild.id), {})["channel_id"] = interaction.channel.id
     save_config(config)
 
-    success_embed = discord.Embed(
+    message = discord.Embed(
         title="✅ Channel Configured",
         description=f"This channel ({interaction.channel.mention}) will now receive the {load_config().get(str(interaction.guild.id), {}).get('update_interval')}h automatic stats updates.",
         color=discord.Color.green()
     )
-    await helper.send_interaction_message(interaction, embed=success_embed)
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name="set-update-interval", description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
 @app_commands.checks.has_permissions(administrator=True)
@@ -142,12 +142,12 @@ async def set_channel(interaction: discord.Interaction):
 async def set_update_interval(interaction: discord.Interaction, hours: int):
     if (hours < 1):
         log(interaction.guild, f'Somebody tried to set hours: {hours}')
-        embed = discord.Embed(
+        error_message = discord.Embed(
             title="❌ Error",
             description="Try again! Only natural numbers including from 1 and above can be set as interval.",
             color=discord.Color.red()
         )
-        await helper.send_interaction_message(interaction, embed=embed)
+        await helper.send_interaction_message(interaction, content=error_message)
         return
 
     config = load_config()
@@ -156,32 +156,30 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
 
     helper.restart_guild_update_loop(interaction.guild)
 
-    embed = discord.Embed(
+    success_message = discord.Embed(
         title="✅ Done!",
         description=f"The update interval is now {hours} hours.",
         color=discord.Color.green()
     )
-    await helper.send_interaction_message(interaction, embed=embed)
+    await helper.send_interaction_message(interaction, content=success_message)
 
 @bot.tree.command(name="commands", description='Display all the commands possible.')
 @app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_commands(interaction: discord.Interaction):
-    await helper.send_interaction_message(interaction, embed=helper._build_commands_message())
+    await helper.send_interaction_message(interaction, content=helper._build_commands_message())
 
 @bot.tree.command(name="links", description=f'Have all the links be displayed.')
 @app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_links(interaction: discord.Interaction):
-    await helper.send_interaction_message(interaction, embed=helper._build_links_message(interaction.guild, helper.load_data()))
+    await helper.send_interaction_message(interaction, content=helper._build_links_message(interaction.guild, helper.load_data()))
 
 @bot.tree.command(name='unlinks', description=f'Have all the unlinked members be displayed.')
 @app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_unlinks(interaction: discord.Interaction):
-    embed = helper._build_unlinked_message(interaction.guild, helper.load_data())
-    log(interaction.guild, embed.description)
-    await helper.send_interaction_message(interaction, embed=embed)
+    await helper.send_interaction_message(interaction, content=helper._build_unlinked_message(interaction.guild, helper.load_data()))
 
 @bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
 @app_commands.checks.has_permissions(administrator=True)
@@ -194,14 +192,14 @@ async def display_info(interaction: discord.Interaction):
     update_interval = guild_config.get('update_interval', 1)
     channel_id = guild_config.get('channel_id')
 
-    embed = discord.Embed(
+    message = discord.Embed(
         title="🤖 Battlefield 6 Rank Bot - Info",
         description="This bot automatically assigns Discord roles based on your Battlefield 6 career rank!",
         color=discord.Color.blue()
     )
 
     # Linked Accounts
-    embed.add_field(
+    message.add_field(
         name="📊 Linked Accounts",
         value=f"**{linked_count}** account(s) linked on this server",
         inline=False
@@ -209,7 +207,7 @@ async def display_info(interaction: discord.Interaction):
 
     # Update Timer
     time_to_update = helper._get_time_to_next_update(interaction.guild)
-    embed.add_field(
+    message.add_field(
         name="⏱️ Update Status",
         value=f"Updates every **{update_interval}h**\nNext update: {time_to_update}",
         inline=False
@@ -217,14 +215,14 @@ async def display_info(interaction: discord.Interaction):
 
     # Setup Status
     channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured"
-    embed.add_field(
+    message.add_field(
         name="⚙️ Configuration",
         value=f"Report channel: {channel_status}",
         inline=False
     )
 
     # Quick Setup Guide
-    embed.add_field(
+    message.add_field(
         name="🚀 Quick Setup (Admin Only)",
         value=(
             f"`{COMMAND_PREFIX}set-channel` - Set report channel\n"
@@ -236,65 +234,65 @@ async def display_info(interaction: discord.Interaction):
     )
 
     # # Platforms
-    # embed.add_field(
+    # message.add_field(
     #     name="🎮 Supported Platforms",
     #     value=f"Default: **{DEFAULT_PLATFORM}**\nAll: {', '.join(sorted(VALID_PLATFORMS))}",
     #     inline=False
     # )
 
     # All Commands
-    embed.add_field(
+    message.add_field(
         name="📋 All Commands",
         value=f"Use `{COMMAND_PREFIX}commands` to see all available commands",
         inline=False
     )
 
-    embed.set_footer(text="For detailed instructions, use !setup or !instructions")
+    message.set_footer(text="For detailed instructions, use !setup or !instructions")
 
-    await helper.send_interaction_message(interaction, embed=embed)
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
 @app_commands.checks.has_permissions(administrator=True)
 @helper.is_admin_or_has_role()
 async def display_setup(interaction: discord.Interaction):
     """Sends detailed setup instructions."""
-    embed = discord.Embed(
+    message = discord.Embed(
         title="📖 Setup Instructions",
         description="Step-by-step guide to get the bot running on your server",
         color=discord.Color.green()
     )
 
-    embed.add_field(
+    message.add_field(
         name="Step 1️⃣: Create Rank Roles",
         value=f"Administrator runs: `{COMMAND_PREFIX}setup-roles`\nThis creates roles for each BF6 rank.",
         inline=False
     )
 
-    embed.add_field(
+    message.add_field(
         name="Step 2️⃣: Set Report Channel",
         value=f"Administrator goes to desired channel and runs: `{COMMAND_PREFIX}set-channel`\nThe bot will use this channel to post updates.",
         inline=False
     )
 
-    embed.add_field(
+    message.add_field(
         name="Step 3️⃣: Link Accounts",
         value=f"Members link their BF6 account: `{COMMAND_PREFIX}link <your_bf6_username>`\nOr admins can link for members: `{COMMAND_PREFIX}link <name> @member`",
         inline=False
     )
 
-    embed.add_field(
+    message.add_field(
         name="Step 4️⃣: Set Update Interval",
         value=f"(Optional) Administrator can set update frequency: `{COMMAND_PREFIX}set-update-interval <hours>`\nDefault is 1 hour.",
         inline=False
     )
 
-    embed.add_field(
+    message.add_field(
         name="✅ That's it!",
         value="The bot will now automatically update member ranks every interval.",
         inline=False
     )
 
-    await helper.send_interaction_message(interaction, embed=embed)
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='unlink', description="Unlink a member's Discord account from their game account.")
 @app_commands.checks.has_permissions(administrator=True)
@@ -308,12 +306,12 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     member_key = str(member.id)
 
     if guild_key not in data or member_key not in data[guild_key]:
-        embed = discord.Embed(
+        message = discord.Embed(
             title="❌ Error",
             description=f"{member.mention} is not linked to any account.",
             color=discord.Color.red()
         )
-        await helper.send_interaction_message(interaction, embed=embed)
+        await helper.send_interaction_message(interaction, content=message)
         return
 
     # Store the removed entry for confirmation
@@ -327,12 +325,12 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     else:
         account_name = removed_entry
 
-    embed = discord.Embed(
+    message = discord.Embed(
         title="✅ Account unlinked",
         description=f"Unlinked {member.mention} from account `{account_name}`",
         color=discord.Color.green()
     )
-    await helper.send_interaction_message(interaction, embed=embed)
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='time-to-update', description='Shows the time until the next automatic update.')
 @app_commands.checks.has_permissions(administrator=True)
@@ -340,17 +338,16 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
 async def show_time_to_update(interaction: discord.Interaction):
     config = load_config()
     guild_config = config.get(str(interaction.guild.id), {})
-    update_interval = guild_config.get('update_interval', 1)
+    update_interval = guild_config.get('update_interval')
     time_left = helper._get_time_to_next_update(interaction.guild)
 
-    embed = discord.Embed(
+    message = discord.Embed(
         title="⏰ Next Update",
         description=f"Time remaining: **{time_left}**",
         color=discord.Color.gold()
     )
-    embed.add_field(name="Update Interval", value=f"{update_interval} hour(s)", inline=False)
-
-    await helper.send_interaction_message(interaction, embed=embed)
+    message.add_field(name="Update Interval", value=f"{update_interval} hour(s)", inline=False)
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='test-role', description='Test role assignment on a member. Useful for troubleshooting.')
 @app_commands.checks.has_permissions(administrator=True)
@@ -360,11 +357,11 @@ async def show_time_to_update(interaction: discord.Interaction):
     member = 'Discord member'
 )
 async def test_role_assignment(interaction: discord.Interaction, rank_name: str, member: discord.Member = None):
-    target = member or ctx.author
+    target = member or interaction.user
 
     if not rank_name:
-        embed = discord.Embed(title="❌ Error", description="Please provide a rank name to test (e.g., 'Private', 'Corporal', 'Sergeant').", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, embed=embed)
+        message = discord.Embed(title="❌ Error", description="Please provide a rank name to test (e.g., 'Private', 'Corporal', 'Sergeant').", color=discord.Color.red())
+        await helper.send_interaction_message(interaction, content=message)
         return
 
     # Get rank roles available
@@ -372,37 +369,37 @@ async def test_role_assignment(interaction: discord.Interaction, rank_name: str,
     available_ranks = list(get_role_dict().keys())
 
     if rank_name not in available_ranks:
-        embed = discord.Embed(title="❌ Invalid rank", description=f"Available ranks: {', '.join(available_ranks)}", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, embed=embed)
+        message = discord.Embed(title="❌ Invalid rank", description=f"Available ranks: {', '.join(available_ranks)}", color=discord.Color.red())
+        await helper.send_interaction_message(interaction, content=message)
         return
 
     # Get the role
     role = discord.utils.get(interaction.guild.roles, name=rank_name)
     if not role:
-        embed = discord.Embed(title="❌ Role not found", description=f"Role `{rank_name}` not found. Did you run `{COMMAND_PREFIX}setup-roles`?", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, embed=embed)
+        message = discord.Embed(title="❌ Role not found", description=f"Role `{rank_name}` not found. Did you run `{COMMAND_PREFIX}setup-roles`?", color=discord.Color.red())
+        await helper.send_interaction_message(interaction, content=message)
         return
 
     # Test assignment
     try:
         if interaction.guild.me.top_role.position <= role.position:
-            embed = discord.Embed(title="❌ Bot permission error", description=f"Bot's top role is too low to assign `{rank_name}`. Please move the bot's role higher in the role hierarchy.", color=discord.Color.red())
-            await helper.send_interaction_message(interaction, embed=embed)
+            message = discord.Embed(title="❌ Bot permission error", description=f"Bot's top role is too low to assign `{rank_name}`. Please move the bot's role higher in the role hierarchy.", color=discord.Color.red())
+            await helper.send_interaction_message(interaction, content=message)
             return
 
         if role in target.roles:
-            embed = discord.Embed(title="ℹ️ Already assigned", description=f"{target.mention} already has the `{rank_name}` role.", color=discord.Color.blue())
-            await helper.send_interaction_message(interaction, embed=embed)
+            message = discord.Embed(title="ℹ️ Already assigned", description=f"{target.mention} already has the `{rank_name}` role.", color=discord.Color.blue())
+            await helper.send_interaction_message(interaction, content=message)
         else:
             await target.add_roles(role)
-            embed = discord.Embed(title="✅ Role assigned", description=f"Successfully assigned `{rank_name}` role to {target.mention}. Role assignment is working!", color=discord.Color.green())
-            await helper.send_interaction_message(interaction, embed=embed)
+            message = discord.Embed(title="✅ Role assigned", description=f"Successfully assigned `{rank_name}` role to {target.mention}. Role assignment is working!", color=discord.Color.green())
+            await helper.send_interaction_message(interaction, content=message)
     except discord.Forbidden:
-        embed = discord.Embed(title="❌ Missing permissions", description=f"Missing permissions to assign role `{rank_name}`.", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, embed=embed)
+        message = discord.Embed(title="❌ Missing permissions", description=f"Missing permissions to assign role `{rank_name}`.", color=discord.Color.red())
+        await helper.send_interaction_message(interaction, content=message)
     except Exception as e:
-        embed = discord.Embed(title="❌ Error", description=f"Error during role assignment: {e}", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, embed=embed)
+        message = discord.Embed(title="❌ Error", description=f"Error during role assignment: {e}", color=discord.Color.red())
+        await helper.send_interaction_message(interaction, content=message)
 
 # @bot.command(name='supported-platforms')
 # async def display_supported_playforms(ctx):
