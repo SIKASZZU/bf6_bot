@@ -448,7 +448,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
-        log(guild, f"Skipping {member.display_name}: no game account linked (!link needed)")
+        log(guild, f"❌ discord: {member.display_name}. Not linked. Skipping.")
         return False
 
     name = entry["name"]
@@ -460,8 +460,8 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         log(guild, f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
         return False
 
-    else:
-        log(guild, f"✅ Data fetch successful for discord: {member.display_name}, link: {name}, {platform}.")
+    # else:
+        # log(guild, f"✅ Data fetch successful for discord: {member.display_name}, link: {name}, {platform}.")
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
@@ -472,7 +472,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
-    log(guild, f"discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+    log(guild, f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
     await assign_rank_role(guild, member, concise_rank_name, channel)
     await remove_rank_role(guild, member, concise_rank_name, channel)
@@ -507,8 +507,11 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
 
             updated_count = 0
             for member in target_guild.members:
-                if await _update_member(target_guild, member, session, channel):
-                    updated_count += 1
+                try:
+                    if await _update_member(target_guild, member, session, channel):
+                        updated_count += 1
+                except Exception as e:
+                    log(guild, f"[ERROR] Failed updating {member.display_name}: {e}")
 
             log(guild, f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
