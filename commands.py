@@ -346,58 +346,6 @@ async def show_time_to_update(interaction: discord.Interaction):
     message.add_field(name="Update Interval", value=f"{update_interval} hour(s)", inline=False)
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='test-role', description='Test role assignment on a member. Useful for troubleshooting.')
-@app_commands.checks.has_permissions(administrator=True)
-@helper.is_admin_or_has_role()
-@app_commands.describe(
-    rank_name = 'Type the rank name you want to set',
-    member = 'Discord member'
-)
-async def test_role_assignment(interaction: discord.Interaction, rank_name: str, member: discord.Member = None):
-    target = member or interaction.user
-
-    if not rank_name:
-        message = discord.Embed(title="❌ Error", description="Please provide a rank name to test (e.g., 'Private', 'Corporal', 'Sergeant').", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, content=message)
-        return
-
-    # Get rank roles available
-    from ranks import get_role_dict
-    available_ranks = list(get_role_dict().keys())
-
-    if rank_name not in available_ranks:
-        message = discord.Embed(title="❌ Invalid rank", description=f"Available ranks: {', '.join(available_ranks)}", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, content=message)
-        return
-
-    # Get the role
-    role = discord.utils.get(interaction.guild.roles, name=rank_name)
-    if not role:
-        message = discord.Embed(title="❌ Role not found", description=f"Role `{rank_name}` not found. Did you run `{COMMAND_PREFIX}setup-roles`?", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, content=message)
-        return
-
-    # Test assignment
-    try:
-        if interaction.guild.me.top_role.position <= role.position:
-            message = discord.Embed(title="❌ Bot permission error", description=f"Bot's top role is too low to assign `{rank_name}`. Please move the bot's role higher in the role hierarchy.", color=discord.Color.red())
-            await helper.send_interaction_message(interaction, content=message)
-            return
-
-        if role in target.roles:
-            message = discord.Embed(title="ℹ️ Already assigned", description=f"{target.mention} already has the `{rank_name}` role.", color=discord.Color.blue())
-            await helper.send_interaction_message(interaction, content=message)
-        else:
-            await target.add_roles(role)
-            message = discord.Embed(title="✅ Role assigned", description=f"Successfully assigned `{rank_name}` role to {target.mention}. Role assignment is working!", color=discord.Color.green())
-            await helper.send_interaction_message(interaction, content=message)
-    except discord.Forbidden:
-        message = discord.Embed(title="❌ Missing permissions", description=f"Missing permissions to assign role `{rank_name}`.", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, content=message)
-    except Exception as e:
-        message = discord.Embed(title="❌ Error", description=f"Error during role assignment: {e}", color=discord.Color.red())
-        await helper.send_interaction_message(interaction, content=message)
-
 # @bot.command(name='supported-platforms')
 # async def display_supported_playforms(ctx):
 #     """ Sends a message to channel containing information about and use cases of bot."""
