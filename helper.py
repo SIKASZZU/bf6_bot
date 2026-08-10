@@ -149,6 +149,10 @@ def _get_time_to_next_update(guild: discord.Guild):
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
+    if isinstance(content, discord.Embed):
+        kwargs['embed'] = content
+        content = None
+
     if interaction.response.is_done():
         await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
     else:
