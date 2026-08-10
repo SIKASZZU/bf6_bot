@@ -15,7 +15,7 @@ from ranks import create_roles
 )
 async def link(interaction: discord.Interaction, name: str, member: discord.Member = None):
 
-    await interaction.response.defer(ephemeral=False)
+    await interaction.response.defer()
 
     platform = DEFAULT_PLATFORM
     if platform not in VALID_PLATFORMS:
@@ -28,7 +28,6 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
         await helper.send_interaction_message(
             interaction,
             "❌ Only administrators can link accounts for other members.",
-            ephemeral=True,
         )
         return
 
@@ -46,8 +45,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     # if not config.get(str(interaction.guild.id), {}).get('channel_id'):
     #     await helper.send_interaction_message(
     #         interaction,
-    #         f"⚠️ **Note:** No report channel is configured! Updates will not be announced. Admin: use `{COMMAND_PREFIX}set-channel` in your desired channel.",
-    #         ephemeral=True
+    #         f"⚠️ **Note:** No report channel is configured! Updates will not be announced. Admin: use `{COMMAND_PREFIX}set-channel` in your desired channel."
     #     )
 
     await force_update.callback(interaction, member=target, update_everybody=False)
@@ -66,8 +64,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     if not is_admin and (member is not None or update_everybody):
         await helper.send_interaction_message(
             interaction,
-            "❌ Only administrators can update accounts for other members or for everybody.",
-            ephemeral=True,
+            "❌ Only administrators can update accounts for other members or for everybody."
         )
         return
 
