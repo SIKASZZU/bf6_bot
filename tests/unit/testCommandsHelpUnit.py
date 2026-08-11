@@ -1,7 +1,7 @@
 import unittest
 import discord
-
-from commands import _build_commands_message, _build_links_message
+from commands import *
+import helper
 
 
 class FakeGuild:
@@ -37,9 +37,9 @@ class TestCommandHelpMessages(unittest.TestCase):
         self.assertNotIn(check_for, embed_dict_str, f"'{check_for}' was not found anywhere in the Embed.")
 
     def test_build_commands_message_includes_slash_commands(self):
-        message = _build_commands_message()
+        message = helper._build_commands_message()
 
-        self.assertInEmbed('!commands', message)
+        self.assertInEmbed('/commands', message)
         self.assertInEmbed('/link', message)
         self.assertInEmbed('/update', message)
 
@@ -51,7 +51,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         }
 
         fake_guild = FakeGuild(id=123)
-        message = _build_links_message(fake_guild, data)
+        message = helper._build_links_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('EA', message)
@@ -62,7 +62,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         member = FakeMember(id=456, display_name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
-        message = _build_links_message(fake_guild, data)
+        message = helper._build_links_message(fake_guild, data)
 
         self.assertInEmbed('CoolPlayer', message)
         self.assertNotInEmbed('<left server>', message)
