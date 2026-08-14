@@ -135,7 +135,7 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
         return
 
     config = load_config()
-    config.setdefault(str(interaction.guild.id)).get('update_interval') = hours
+    config.setdefault(str(interaction.guild.id))['update_interval'] = hours
     save_config(config)
 
     helper.restart_guild_update_loop(interaction.guild)

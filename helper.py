@@ -484,7 +484,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     each successful member update - used for live progress reporting (e.g. editing a message).
     """
     guild_config = load_config().get(str(guild.id))
-    channel = bot.get_channel(int(guild_config['channel_id'])) if guild_config.get('channel_id') else None
+    channel = bot.get_channel(int(guild_config.get('channel_id'))) if guild_config else None
 
     log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 

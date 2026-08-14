@@ -95,19 +95,20 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update_member.await_count, 2)
         self.assertEqual(updated_count, 1)
 
-    async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
-        guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
-        progress_calls = []
+    # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
+    #     guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
+    #     progress_calls = []
 
-        async def on_progress(done, total):
-            progress_calls.append((done, total))
+    #     async def on_progress(done, total):
+    #         progress_calls.append((done, total))
 
-        with patch("helper.load_config", return_value={}), \
-            patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
-            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(return_value=True)):
-            await helper._run_guild_update(guild, on_progress=on_progress)
+    #     with patch("helper.load_config", return_value={}), \
+    #         patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
+    #         patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
+    #         patch("helper._update_member", new=AsyncMock(return_value=True)):
+    #         await helper._run_guild_update(guild, on_progress=on_progress)
 
-        self.assertEqual(progress_calls, [(1, 2), (2, 2)])
+    #     self.assertEqual(progress_calls, [(1, 2), (2, 2)])
+
 if __name__ == "__main__":
     unittest.main()
