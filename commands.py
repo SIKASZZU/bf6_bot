@@ -1,5 +1,6 @@
 from discord import app_commands
 import aiohttp
+import time
 
 from globals import *
 import helper
@@ -55,7 +56,21 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     try:
         if update_everybody:
-            await helper._run_guild_update(interaction.guild)
+            last_edit = 0.0
+
+            async def report_progress(done: int, total: int):
+                nonlocal last_edit
+                now = time.monotonic()
+                is_last = done == total
+                if not is_last and (now - last_edit) < 2:
+                    return
+                last_edit = now
+                try:
+                    await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
+                except discord.HTTPException as e:
+                    log(interaction.guild, f"[WARNING] Failed to edit progress message: {e}")
+
+            await helper._run_guild_update(interaction.guild, on_progress=report_progress)
             await helper.send_interaction_message(interaction, "✅ All players stats update completed successfully!")
         else:
             async with aiohttp.ClientSession() as session:

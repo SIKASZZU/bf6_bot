@@ -476,12 +476,17 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return True
 
-async def _run_guild_update(guild: discord.Guild) -> int:
+async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
+
+    on_progress, if given, is an async callable(updated_count, total_linked) invoked after
+    each successful member update - used for live progress reporting (e.g. editing a message).
     """
     guild_config = load_config().get(str(guild.id), {})
     channel = bot.get_channel(int(guild_config['channel_id'])) if guild_config.get('channel_id') else None
+
+    total_linked = len(load_data().get(str(guild.id), {}))
 
     log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 
@@ -491,6 +496,8 @@ async def _run_guild_update(guild: discord.Guild) -> int:
             try:
                 if await _update_member(guild, member, session, channel):
                     updated_count += 1
+                    if on_progress:
+                        await on_progress(updated_count, total_linked)
             except Exception as e:
                 log(guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
 
