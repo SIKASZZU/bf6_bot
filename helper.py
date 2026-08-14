@@ -48,8 +48,8 @@ def _build_commands_message():
     normal_fields = []
 
     seen_names = set()
-
-    for cmd in list(bot.commands) + _get_tree_commands():
+    all_commands = list(bot.commands) + list(_get_tree_commands())
+    for cmd in sorted(all_commands, key=lambda c: c.name):
         if getattr(cmd, 'hidden', False):
             continue
 
