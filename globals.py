@@ -16,6 +16,7 @@ intents.members = True
 COMMAND_PREFIX = '!' if not DEV_MODE else 'dev!'
 
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
+bot.remove_command('help')
 
 API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
 def build_api_url(name: str, platform: str) -> str:
