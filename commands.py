@@ -318,19 +318,19 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     )
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='time-until-update', description='Shows the time until the next automatic update.')
-@helper.is_admin_or_has_role()
-async def show_time_to_update(interaction: discord.Interaction):
-    guild_config = load_config().get(str(interaction.guild.id))
-    time_left = helper._get_time_to_next_update(interaction.guild)
+# @bot.tree.command(name='time-until-update', description='Shows the time until the next automatic update.')
+# @helper.is_admin_or_has_role()
+# async def show_time_to_update(interaction: discord.Interaction):
+#     guild_config = load_config().get(str(interaction.guild.id))
+#     time_left = helper._get_time_to_next_update(interaction.guild)
 
-    message = discord.Embed(
-        title="⏰ Next Update",
-        description=f"Time remaining: **{time_left}**",
-        color=discord.Color.gold()
-    )
-    message.add_field(name="Update Interval", value=f"{guild_config.get('update_interval')} hour(s)", inline=False)
-    await helper.send_interaction_message(interaction, content=message)
+#     message = discord.Embed(
+#         title="⏰ Next Update",
+#         description=f"Time remaining: **{time_left}**",
+#         color=discord.Color.gold()
+#     )
+#     message.add_field(name="Update Interval", value=f"{guild_config.get('update_interval')} hour(s)", inline=False)
+#     await helper.send_interaction_message(interaction, content=message)
 
 # @bot.command(name='supported-platforms')
 # async def display_supported_playforms(ctx):
