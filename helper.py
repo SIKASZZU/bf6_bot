@@ -326,10 +326,10 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
                 return stats
 
         except Exception as e:
-            log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {e}")
             await asyncio.sleep(2 ** attempt)
             continue
 
+    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {e}")
     return None
 
 def get_level_and_rank(stats: dict):
@@ -475,10 +475,12 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return True
 
+@tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
 async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
+    await bot.wait_until_ready()
+
     if guild is not None:
         guilds_to_update = [guild]
-    # try to get guild through channel
     elif report_channel is not None:
         guild_context = getattr(report_channel, 'guild', None)
         guilds_to_update = [guild_context] if guild_context is not None else list(bot.guilds)
@@ -505,7 +507,7 @@ async def update_all_players(report_channel: discord.TextChannel = None, guild: 
                     if await _update_member(target_guild, member, session, channel):
                         updated_count += 1
                 except Exception as e:
-                    log(guild, f"[ERROR] Failed updating {member.display_name}: {e}")
+                    log(target_guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
 
             log(guild, f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
 
@@ -531,21 +533,14 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
         updated_count = 0
         async with aiohttp.ClientSession() as session:
-            await update_all_players(channel, guild)
-            # for member in guild.members:
-            #     try:
-            #         if await _update_member(guild, member, session, channel):
-            #             updated_count += 1
-            #     except Exception as e:
-            #         log(guild, f"[ERROR] Failed updating {member.display_name}: {e}")
+            for member in guild.members:
+                try:
+                    if await _update_member(guild, member, session, channel):
+                        updated_count += 1
+                except Exception as e:
+                    log(guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
 
         log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
-
-    @_loop.error
-    async def _loop_error(error):
-        log(bot.get_guild(guild_id), f"[FATAL] Update loop crashed: {error}")
-        if not _loop.is_running():
-            _loop.restart()
 
     return _loop
 

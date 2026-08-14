@@ -22,13 +22,6 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
         return
 
     target = member or interaction.user
-    # only allow linking someone else if the invoker is an admin
-    if member is not None and not interaction.user.guild_permissions.administrator:
-        await helper.send_interaction_message(
-            interaction,
-            "❌ Only administrators can link accounts for other members.",
-        )
-        return
 
     data = helper.load_data()
     data.setdefault(str(interaction.guild.id), {})[str(target.id)] = {"name": name, "platform": platform}
@@ -38,14 +31,6 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
         await helper.send_interaction_message(interaction, f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
     else:
         await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
-
-    # Check if report channel is configured
-    # config = load_config()
-    # if not config.get(str(interaction.guild.id), {}).get('channel_id'):
-    #     await helper.send_interaction_message(
-    #         interaction,
-    #         f"⚠️ **Note:** No report channel is configured! Updates will not be announced. Admin: use `{COMMAND_PREFIX}set-channel` in your desired channel."
-    #     )
 
     await force_update.callback(interaction, member=target, update_everybody=False)
 
@@ -57,14 +42,6 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 )
 async def force_update(interaction: discord.Interaction, member: discord.Member = None, update_everybody: bool = False):
     """Manually forces update on member. """
-
-    is_admin = interaction.user.guild_permissions.administrator
-    if not is_admin and (member is not None or update_everybody):
-        await helper.send_interaction_message(
-            interaction,
-            "❌ Only administrators can update accounts for other members or for everybody."
-        )
-        return
 
     member_name = member.display_name if member else "None"
 
@@ -86,6 +63,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                 if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
                     log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
                     await helper.send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
+                else:
+                    raise Exception('')
 
     except Exception as e:
         log(interaction.guild, f"Manual update error: {e}")
@@ -202,7 +181,7 @@ async def display_info(interaction: discord.Interaction):
     )
 
     # Setup Status
-    channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured"
+    channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured. Use /set-channel so bot reports information there."
     message.add_field(
         name="⚙️ Configuration",
         value=f"Report channel: {channel_status}",
@@ -211,12 +190,9 @@ async def display_info(interaction: discord.Interaction):
 
     # Quick Setup Guide
     message.add_field(
-        name="🚀 Quick Setup (Admin Only)",
+        name="🚀 Quick Setup",
         value=(
-            f"`{COMMAND_PREFIX}set-channel` - Set report channel\n"
-            f"`{COMMAND_PREFIX}setup-roles` - Create rank roles\n"
-            f"`{COMMAND_PREFIX}link <name>` - Link your account\n"
-            f"`{COMMAND_PREFIX}update` - Manual update"
+            f"`/setup` - Detailed information (2 minutes)\n"
         ),
         inline=False
     )
