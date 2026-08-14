@@ -58,10 +58,9 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         if update_everybody:
             last_edit = 0.0
 
-            async def report_progress(done: int, total: int):
+            async def report_progress(done: int, total: int, is_last: bool):
                 nonlocal last_edit
                 now = time.monotonic()
-                is_last = done == total
                 if not is_last and (now - last_edit) < 2:
                     return
                 last_edit = now
