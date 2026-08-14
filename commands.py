@@ -25,7 +25,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     target = member or interaction.user
 
     data = helper.load_data()
-    data.setdefault(str(interaction.guild.id), {})[str(target.id)] = {"name": name, "platform": platform}
+    data.setdefault(str(interaction.guild.id))[str(target.id)] = {"name": name, "platform": platform}
     helper.save_data(data)
 
     if target.id == interaction.user.id:
@@ -109,12 +109,12 @@ async def setup_roles(interaction: discord.Interaction):
 @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
     config = load_config()
-    config.setdefault(str(interaction.guild.id), {})["channel_id"] = interaction.channel.id
+    config.setdefault(str(interaction.guild.id))["channel_id"] = interaction.channel.id
     save_config(config)
 
     message = discord.Embed(
         title="✅ Channel Configured",
-        description=f"This channel ({interaction.channel.mention}) will now receive the {load_config().get(str(interaction.guild.id), {}).get('update_interval')}h automatic stats updates.",
+        description=f"This channel ({interaction.channel.mention}) will now receive the {load_config().get(str(interaction.guild.id)).get('update_interval')}h automatic stats updates.",
         color=discord.Color.green()
     )
     await helper.send_interaction_message(interaction, content=message)
@@ -136,7 +136,7 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
         return
 
     config = load_config()
-    config.setdefault(str(interaction.guild.id), {})['update_interval'] = hours
+    config.setdefault(str(interaction.guild.id)).get('update_interval') = hours
     save_config(config)
 
     helper.restart_guild_update_loop(interaction.guild)
@@ -167,10 +167,9 @@ async def display_unlinks(interaction: discord.Interaction):
 @helper.is_admin_or_has_role()
 async def display_info(interaction: discord.Interaction):
     config = load_config()
-    guild_config = config.get(str(interaction.guild.id), {})
-    data = helper.load_data()
-    linked_count = len(data.get(str(interaction.guild.id), {}))
-    update_interval = guild_config.get('update_interval', 1)
+    guild_config = config.get(str(interaction.guild.id))
+    linked_count = len(helper.load_data().get(str(interaction.guild.id)))
+    update_interval = guild_config.get('update_interval')
     channel_id = guild_config.get('channel_id')
 
     message = discord.Embed(

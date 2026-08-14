@@ -160,7 +160,7 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
     Old entries were plain strings (just the EA name) - normalize those to
     the new dict shape so both formats keep working.
     """
-    entry = data.get(str(guild_id), {}).get(str(discord_id))
+    entry = data.get(str(guild_id)).get(str(discord_id))
     if entry is None:
         return None
     if isinstance(entry, str):
@@ -195,7 +195,7 @@ async def global_rate_limit(ctx):
 async def _check_and_send_warn_no_channel(ctx):
     """Sends a warning message when no report channel is configured."""
 
-    if not load_config().get(str(ctx.guild.id), {}).get('channel_id'):
+    if not load_config().get(str(ctx.guild.id)).get('channel_id'):
         warning_embed = discord.Embed(
             title="⚠️ Report Channel Not Configured",
             description=f"No report channel has been set for this server!",
@@ -483,10 +483,10 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     on_progress, if given, is an async callable(updated_count, total_linked) invoked after
     each successful member update - used for live progress reporting (e.g. editing a message).
     """
-    guild_config = load_config().get(str(guild.id), {})
+    guild_config = load_config().get(str(guild.id))
     channel = bot.get_channel(int(guild_config['channel_id'])) if guild_config.get('channel_id') else None
 
-    total_linked = len(load_data().get(str(guild.id), {}))
+    total_linked = len(load_data().get(str(guild.id)))
 
     log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 
