@@ -3,7 +3,7 @@ import json
 import sqlite3
 import os
 import sys
-from discord.ext import commands
+from discord.ext import commands, tasks
 from urllib.parse import urlencode
 
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
@@ -40,8 +40,10 @@ DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 1
 
-# TODO: have it check by int somehow id
+# TODO: have it check by int somehow id // lol please fix this shit.
 PERMISSIONED_ROLE: str = 'Admin'
+
+running_loops: dict[int, tasks.Loop] = {}
 
 def log(guild: discord.Guild, message: str):
     def get_caller() -> str:

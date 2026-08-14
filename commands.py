@@ -55,9 +55,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     try:
         if update_everybody:
-            await helper.update_all_players(guild=interaction.guild)
+            await helper._run_guild_update(interaction.guild)
             await helper.send_interaction_message(interaction, "✅ All players stats update completed successfully!")
-
         else:
             async with aiohttp.ClientSession() as session:
                 if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):

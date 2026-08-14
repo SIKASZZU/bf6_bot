@@ -56,35 +56,41 @@ class DummySession:
 
 
 class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
-    async def test_update_all_players_uses_the_requested_guild(self):
+    async def test_run_guild_update_updates_every_member_of_the_given_guild(self):
         guild_a = FakeGuild(111, [FakeMember("Alice")])
-        guild_b = FakeGuild(222, [FakeMember("Bob")])
-        interaction = FakeInteraction()
+        guild_b = FakeGuild(222, [FakeMember("Bob"), FakeMember("Carol")])
 
-        with patch("helper.bot.wait_until_ready", new=AsyncMock()), \
-             patch("helper.load_config", return_value={}), \
-             patch.object(type(helper.bot), "guilds", new_callable=PropertyMock, return_value=[guild_a, guild_b]), \
-             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-             patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
-            await helper.update_all_players(interaction, guild=guild_b)
-
-        self.assertEqual(update_member.await_count, 1)
-        self.assertEqual(update_member.await_args_list[0].args[0], guild_b)
-
-    async def test_update_all_players_uses_all_available_guilds_when_no_guild_is_provided(self):
-        guild_a = FakeGuild(111, [FakeMember("Alice")])
-        guild_b = FakeGuild(222, [FakeMember("Bob")])
-        interaction = FakeInteraction()
-
-        with patch("helper.bot.wait_until_ready", new=AsyncMock()), \
-             patch("helper.load_config", return_value={}), \
-             patch.object(type(helper.bot), "guilds", new_callable=PropertyMock, return_value=[guild_a, guild_b]), \
-             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-             patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
-            await helper.update_all_players(interaction)
+        with patch("helper.load_config", return_value={}), \
+            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
+            await helper._run_guild_update(guild_b)
 
         self.assertEqual(update_member.await_count, 2)
-        self.assertEqual({call.args[0].id for call in update_member.await_args_list}, {111, 222})
+        self.assertTrue(all(call.args[0] is guild_b for call in update_member.await_args_list))
+
+    async def test_run_guild_update_resolves_configured_channel(self):
+        guild = FakeGuild(111, [FakeMember("Alice")])
+        fake_channel = object()
+
+        with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("helper.bot.get_channel", return_value=fake_channel) as get_channel, \
+            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
+            await helper._run_guild_update(guild)
+
+        get_channel.assert_called_once_with(999)
+        self.assertEqual(update_member.await_args_list[0].args[3], fake_channel)
+
+    async def test_run_guild_update_continues_after_a_member_raises(self):
+        guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
+
+        with patch("helper.load_config", return_value={}), \
+            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("helper._update_member", new=AsyncMock(side_effect=[Exception("boom"), True])) as update_member:
+            updated_count = await helper._run_guild_update(guild)
+
+        self.assertEqual(update_member.await_count, 2)
+        self.assertEqual(updated_count, 1)
 
 if __name__ == "__main__":
     unittest.main()

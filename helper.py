@@ -285,6 +285,7 @@ async def on_guild_join(guild):
         msg += f"Initialized default data configuration for server: {guild.name} ({server_key})"
 
     log(guild, msg)
+    start_guild_update_loop(guild)
 
 @bot.event
 async def on_guild_remove(guild):
@@ -475,43 +476,26 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return True
 
-@tasks.loop(hours=AUTO_UPDATE_TIMER_HOURS)
-async def update_all_players(report_channel: discord.TextChannel = None, guild: discord.Guild = None):
-    await bot.wait_until_ready()
+async def _run_guild_update(guild: discord.Guild) -> int:
+    """Runs one full update pass over every member of a guild, assigning/removing rank roles.
+    Resolves the guild's configured report channel itself, so callers just pass a guild.
+    """
+    guild_config = load_config().get(str(guild.id), {})
+    channel = bot.get_channel(int(guild_config['channel_id'])) if guild_config.get('channel_id') else None
 
-    if guild is not None:
-        guilds_to_update = [guild]
-    elif report_channel is not None:
-        guild_context = getattr(report_channel, 'guild', None)
-        guilds_to_update = [guild_context] if guild_context is not None else list(bot.guilds)
-    else:
-        guilds_to_update = list(bot.guilds)
+    log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 
-    if not guilds_to_update:
-        log(guild, '[ERROR] Automatic update skipped: no guilds to update.')
-        return
-
+    updated_count = 0
     async with aiohttp.ClientSession() as session:
-        log(guild, f"[DEBUG] guild_to_update {[getattr(guild, 'name', str(guild)) for guild in guilds_to_update]}")
-        for target_guild in guilds_to_update:
-            report_guild = getattr(report_channel, 'guild', None)
-            channel = report_channel if (report_channel is not None and report_guild is not None and report_guild.id == target_guild.id) else None
-            if channel is None and load_config().get(str(target_guild.id), {}).get('channel_id'):
-                channel = bot.get_channel(int(load_config().get(str(target_guild.id), {})['channel_id']))
+        for member in guild.members:
+            try:
+                if await _update_member(guild, member, session, channel):
+                    updated_count += 1
+            except Exception as e:
+                log(guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
 
-            log(guild, f"[START AUTOMATIC UPDATE] [{target_guild.name}] Interval: {load_config().get(str(target_guild.id), {}).get('update_interval', AUTO_UPDATE_TIMER_HOURS)} hours")
-
-            updated_count = 0
-            for member in target_guild.members:
-                try:
-                    if await _update_member(target_guild, member, session, channel):
-                        updated_count += 1
-                except Exception as e:
-                    log(target_guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
-
-            log(guild, f"[FINISHED AUTOMATIC UPDATE] [{target_guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
-
-running_loops: dict[int, tasks.Loop] = {}
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+    return updated_count
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
     @tasks.loop(hours=interval_hours)
@@ -524,23 +508,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             _loop.cancel()
             return
 
-        guild_config = load_config().get(str(guild_id), {})
-        channel = None
-        if guild_config.get('channel_id'):
-            channel = bot.get_channel(int(guild_config['channel_id']))
-
-        log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}] Interval: {interval_hours}h")
-
-        updated_count = 0
-        async with aiohttp.ClientSession() as session:
-            for member in guild.members:
-                try:
-                    if await _update_member(guild, member, session, channel):
-                        updated_count += 1
-                except Exception as e:
-                    log(guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
-
-        log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+        await _run_guild_update(guild)
 
     return _loop
 
@@ -550,7 +518,7 @@ def start_guild_update_loop(guild: discord.Guild):
     if existing and existing.is_running():
         return
 
-    loop = _make_guild_update_loop(guild.id, load_config().get(str(guild.id), {}).get('update_interval'))
+    loop = _make_guild_update_loop(guild.id, load_config().get(str(guild.id)).get('update_interval'))
     running_loops[guild.id] = loop
     loop.start()
 
