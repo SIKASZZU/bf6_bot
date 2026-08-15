@@ -309,6 +309,15 @@ async def on_guild_remove(guild):
     if existing:
         existing.cancel()
 
+@bot.event
+async def on_member_remove(member: discord.Member):
+    data = load_data()
+
+    if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
+        del data[str(member.guild.id)][str(member.id)]
+        save_data(data)
+        log(member.guild, f"[LEFT] {member.display_name} ({str(member.id)}) left the guild - removed their link from data.")
+
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries up to max_retries times for any failed request."""
