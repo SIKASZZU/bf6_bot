@@ -59,29 +59,25 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     target = member or interaction.user
 
     try:
-        if update_everybody:
-            last_edit = 0.0
-
-            async def report_progress(done: int, total: int, is_last: bool):
-                nonlocal last_edit
-                now = time.monotonic()
-                if not is_last and (now - last_edit) < 2:
-                    return
-                last_edit = now
-                try:
-                    await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
-                except discord.HTTPException as e:
-                    log(interaction.guild, f"[WARNING] Failed to edit progress message: {e}")
-
-            await helper._run_guild_update(interaction.guild, on_progress=report_progress)
-            await helper.send_interaction_message(interaction, "✅ All players stats update completed successfully!")
-        else:
+        if not update_everybody:
             async with aiohttp.ClientSession() as session:
                 if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
                     log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
-                    await helper.send_interaction_message(interaction, f"✅ Player stats update completed successfully for {target.display_name}!")
+                    await interaction.edit_original_response(content=f"✅ Player stats update completed successfully for {target.display_name}!")
                 else:
                     raise Exception('')
+            return
+
+        last_edit = 0.0
+        async def report_progress(done: int, total: int, is_last: bool):
+            nonlocal last_edit
+            now = time.monotonic()
+            if not is_last and (now - last_edit) < 2:
+                return
+            last_edit = now
+            await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
+        await helper._run_guild_update(interaction.guild, on_progress=report_progress)
+        await interaction.edit_original_response(content=f"✅ All players stats update completed successfully!")
 
     except Exception as e:
         log(interaction.guild, f"Manual update error: {e}")
