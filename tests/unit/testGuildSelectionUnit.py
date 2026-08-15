@@ -10,10 +10,16 @@ class FakeGuild:
         self.name = f"Guild {guild_id}"
         self.members = members or []
 
+    def get_member(self, member_id):
+        for member in self.members:
+            if getattr(member, "id", None) == int(member_id):
+                return member
+        return None
 
 class FakeMember:
-    def __init__(self, name):
-        self.display_name = name
+    def __init__(self, member_id, name=None):
+        self.id = int(member_id)
+        self.display_name = name or str(member_id)
         self.bot = False
 
 
@@ -57,8 +63,8 @@ class DummySession:
 
 class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
     async def test_run_guild_update_updates_every_member_of_the_given_guild(self):
-        guild_a = FakeGuild(111, [FakeMember("Alice")])
-        guild_b = FakeGuild(222, [FakeMember("Bob"), FakeMember("Carol")])
+        guild_a = FakeGuild(111, [FakeMember(1, "Alice")])
+        guild_b = FakeGuild(222, [FakeMember(1, "Bob"), FakeMember(2, "Carol")])
 
         with patch("helper.load_config", return_value={}), \
             patch("helper.load_data", return_value={"222": {"1": {}, "2": {}}}), \
@@ -70,7 +76,7 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(call.args[0] is guild_b for call in update_member.await_args_list))
 
     async def test_run_guild_update_resolves_configured_channel(self):
-        guild = FakeGuild(111, [FakeMember("Alice")])
+        guild = FakeGuild(111, [FakeMember(1, "Alice")])
         fake_channel = object()
 
         with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
@@ -84,7 +90,7 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update_member.await_args_list[0].args[3], fake_channel)
 
     async def test_run_guild_update_continues_after_a_member_raises(self):
-        guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
+        guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
 
         with patch("helper.load_config", return_value={}), \
             patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \

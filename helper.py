@@ -498,15 +498,17 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 
     updated_count = 0
+    linked_member_ids = list(load_data().get(str(guild.id), {}).keys())
     async with aiohttp.ClientSession() as session:
-        for idx, member in enumerate(len(load_data().get(str(guild.id)))):
-            # TODO: actually siin ei saa tekkida excpetionit?
+        for idx, member_id in enumerate(linked_member_ids):
+            member = guild.get_member(int(member_id))
+
             try:
-                updated_count += 1
                 await _update_member(guild, member, session, channel)
+                updated_count += 1
 
                 if on_progress:
-                    await on_progress(updated_count, len(load_data().get(str(guild.id))), idx == (len(load_data().get(str(guild.id))) - 1))
+                    await on_progress(updated_count, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
             except Exception as e:
                 log(guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
