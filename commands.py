@@ -50,11 +50,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
     member_name = member.display_name if member else "None"
 
-    await helper.send_interaction_message(
-        interaction,
-        f'🔄 Updating...',
-    )
-    log(interaction.guild, f'(Updating... arguments: member: {member_name}, update_everybody: {update_everybody})')
+    await helper.send_interaction_message(interaction, f'🔄 Updating...')
+    log(interaction.guild, f'(Updating... arguments: member: `{member_name}`, update_everybody: `{update_everybody}`)')
 
     target = member or interaction.user
 
@@ -63,9 +60,9 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             async with aiohttp.ClientSession() as session:
                 if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
                     log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
-                    await interaction.edit_original_response(content=f"✅ Player stats update completed successfully for {target.display_name}!")
+                    await interaction.edit_original_response(content=f"✅ Player update completed successfully for `{target.display_name}`!")
                 else:
-                    raise Exception('')
+                    raise Exception(f'Failed to update for discord: `{target.display_name}`')
             return
 
         last_edit = 0.0
@@ -76,12 +73,18 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                 return
             last_edit = now
             await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
-        await helper._run_guild_update(interaction.guild, on_progress=report_progress)
-        await interaction.edit_original_response(content=f"✅ All players stats update completed successfully!")
+
+        failed_to_update: list = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
+
+        if failed_to_update:
+            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {", ".join(failed_to_update)}.")
+            return
+
+        await interaction.edit_original_response(content=f"✅ Update successful.")
 
     except Exception as e:
         log(interaction.guild, f"Manual update error: {e}")
-        await helper.send_interaction_message(interaction, f"❌ An error occurred during the update: {e}")
+        await interaction.edit_original_response(content=f"❌ An error occurred during the update: {e}")
 
 @bot.tree.command(name="setup-roles", description='Creates all possible career rank roles for bot to assign.')
 @helper.is_admin_or_has_role()

@@ -96,10 +96,10 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
             patch("helper._update_member", new=AsyncMock(side_effect=[Exception("boom"), True])) as update_member:
-            updated_count = await helper._run_guild_update(guild)
+            failed_to_update: list = await helper._run_guild_update(guild)
 
         self.assertEqual(update_member.await_count, 2)
-        self.assertEqual(updated_count, 1)
+        self.assertEqual(len(failed_to_update), 1)
 
     # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
     #     guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])

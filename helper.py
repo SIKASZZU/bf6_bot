@@ -320,8 +320,10 @@ async def on_member_remove(member: discord.Member):
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
-    Retries up to max_retries times for any failed request."""
+    Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
+    permanent (bad name/platform) and fails immediately without retrying."""
 
+    last_error = None
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
             API_URL = build_api_url(name, platform)
@@ -332,14 +334,21 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
                 stats = await response.json()
 
                 if isinstance(stats, dict) and "errors" in stats:
-                    raise Exception(f"{stats['errors']}")
+                    errors = stats["errors"]
+                    if any("not found" in str(e).lower() for e in errors):
+                        log(guild, f"❌ ({name}, {platform}) not found on gametools - check the linked name/platform.")
+                        return None
+
+                    raise Exception(f"{errors}")
                 return stats
 
         except Exception as e:
-            await asyncio.sleep(2 ** attempt)
+            last_error = e
+            if attempt < API_MAX_RETRIES:
+                await asyncio.sleep(2 ** attempt)
             continue
 
-    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {e}")
+    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {last_error}")
     return None
 
 def get_level_and_rank(stats: dict):
@@ -450,7 +459,8 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     """Update a single member's rank. """
     await bot.wait_until_ready()
 
-    if member.bot: return False
+    if member.bot:
+        return False
 
     entry = get_player_entry(load_data(), guild.id, member.id)
     if not entry:
@@ -498,23 +508,29 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 
     updated_count = 0
-    linked_member_ids = list(load_data().get(str(guild.id), {}).keys())
+    failed_to_update: list = []
+    linked_member_ids = list(load_data().get(str(guild.id)).keys())
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
 
             try:
-                await _update_member(guild, member, session, channel)
-                updated_count += 1
+                updated: bool = await _update_member(guild, member, session, channel)
 
                 if on_progress:
                     await on_progress(updated_count, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
-            except Exception as e:
-                log(guild, f"[ERROR] Update failed for {member.display_name}, skipping: {e}")
+                if not updated:
+                    raise Exception('_update_member failed to update.')
 
-    log(guild, f"[FINISHED AUTOMATIC UPDATE] [{guild.name}] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
-    return updated_count
+                updated_count += 1
+
+            except Exception as e:
+                failed_to_update.append(member.display_name)
+                log(guild, f"❌ [ERROR] Update failed for discord: {member.display_name}, skipping: {e}")
+
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
+    return failed_to_update
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
     @tasks.loop(hours=interval_hours)
