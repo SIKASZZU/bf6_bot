@@ -44,8 +44,7 @@ def _build_commands_message():
         color=discord.Color.blue()
     )
 
-    admin_fields = []
-    normal_fields = []
+    command_fields = []
 
     seen_names = set()
     all_commands = list(bot.commands) + list(_get_tree_commands())
@@ -58,25 +57,16 @@ def _build_commands_message():
             continue
         seen_names.add(name)
 
-        is_admin = any(
-            getattr(check, '__qualname__', '').startswith('has_permissions')
-            for check in getattr(cmd, 'checks', [])
-        )
 
         prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
 
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
-        field_value = f"{prefix}{name} — {help_text}"
+        field_value = f"`{prefix}{name}` — {help_text}"
 
-        if is_admin:
-            admin_fields.append(field_value)
-        else:
-            normal_fields.append(field_value)
+        command_fields.append(field_value)
 
-    if normal_fields:
-        embed.add_field(name="User Commands", value="\n".join(normal_fields), inline=False)
-    if admin_fields:
-        embed.add_field(name="Administrator Commands", value="\n".join(admin_fields), inline=False)
+    if command_fields:
+        embed.add_field(name="Admin commands", value="\n".join(command_fields), inline=False)
 
     return embed
 
