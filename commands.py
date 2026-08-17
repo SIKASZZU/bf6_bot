@@ -248,19 +248,19 @@ async def display_setup(interaction: discord.Interaction):
 
     message.add_field(
         name="Step 2️⃣: Set Report Channel",
-        value=f"Administrator goes to desired channel and runs: `{COMMAND_PREFIX}set-channel`\nThe bot will use this channel to post updates.",
+        value=f"Administrator goes to desired channel and runs: `{COMMAND_PREFIX}set-channel`\nThe bot will use set channel to post updates if any.",
         inline=False
     )
 
     message.add_field(
         name="Step 3️⃣: Link Accounts",
-        value=f"Members link their BF6 account: `{COMMAND_PREFIX}link <your_bf6_username>`\nOr admins can link for members: `{COMMAND_PREFIX}link <name> @member`",
+        value=f"Admins can link for members: `{COMMAND_PREFIX}link <member_{DEFAULT_PLATFORM}_name> @member`",
         inline=False
     )
 
     message.add_field(
         name="Step 4️⃣: Set Update Interval",
-        value=f"(Optional) Administrator can set update frequency: `{COMMAND_PREFIX}set-update-interval <hours>`\nDefault is 1 hour.",
+        value=f"(Optional) Administrator can set update frequency: `{COMMAND_PREFIX}set-update-interval <hours>`\nDefault is {AUTO_UPDATE_TIMER_HOURS} hour.",
         inline=False
     )
 

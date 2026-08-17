@@ -38,7 +38,7 @@ DB_CONFIG_FILE  = 'config'
 VALID_PLATFORMS = {'EA'}
 DEFAULT_PLATFORM = 'EA'
 
-AUTO_UPDATE_TIMER_HOURS : int = 1
+AUTO_UPDATE_TIMER_HOURS : int = 3
 
 # TODO: have it check by int somehow id // lol please fix this shit.
 PERMISSIONED_ROLE: str = 'Admin'
