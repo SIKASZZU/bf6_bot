@@ -266,13 +266,13 @@ async def on_guild_join(guild):
             "update_interval": 1
         }
         save_config(config)
-        msg += f"Initialized default config configuration for server: {guild.name} ({server_key})\n"
+        msg += f"Initialized default config configuration for server.\n"
 
     data = load_data()
     if server_key not in data:
         data[server_key] = {}
         save_data(data)
-        msg += f"Initialized default data configuration for server: {guild.name} ({server_key})"
+        msg += f"Initialized default data configuration for server."
 
     log(guild, msg)
     start_guild_update_loop(guild)
@@ -286,12 +286,12 @@ async def on_guild_remove(guild):
 
     if server_key in config:
         delete_config_key(server_key)
-        msg += f"Removed configuration for server: {guild.name} ({server_key})\n"
+        msg += f"Removed configuration for server.\n"
 
     data = load_data()
     if server_key in data:
         delete_data_key(server_key)
-        msg += f"Removed saved data for server: {guild.name} ({server_key})"
+        msg += f"Removed saved data for server."
 
     log(guild, msg)
 
