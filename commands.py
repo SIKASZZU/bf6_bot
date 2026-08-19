@@ -37,7 +37,6 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     else:
         await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
 
-    await force_update.callback(interaction, member=target, update_everybody=False)
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @helper.is_admin_or_has_role()
