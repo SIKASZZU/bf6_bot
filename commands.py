@@ -88,14 +88,14 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 @bot.tree.command(name='setup-roles', description='Creates all possible career rank roles for bot to assign.')
 @helper.is_admin_or_has_role()
 async def setup_roles(interaction: discord.Interaction):
-    created, skipped = await create_roles(interaction.guild)
+    created, skipped, failed = await create_roles(interaction.guild)
 
     message = discord.Embed(
         title="⚙️ Role Setup",
         color=discord.Color.green()
     )
 
-    if not created and not skipped:
+    if not created and not skipped and not failed:
         message.description = "❌ Something went wrong trying to create roles."
         message.color = discord.Color.red()
     else:
@@ -103,6 +103,13 @@ async def setup_roles(interaction: discord.Interaction):
             message.add_field(name="✅ Created roles", value=", ".join(created), inline=False)
         if skipped:
             message.add_field(name="✅ Already existed", value=", ".join(skipped), inline=False)
+        if failed:
+            message.add_field(
+                name="❌ Missing permissions",
+                value=", ".join(failed) + "\n_Move the bot's role above these ranks (or grant Manage Roles), then run `/setup-roles` again._",
+                inline=False
+            )
+            message.color = discord.Color.orange()
 
     await helper.send_interaction_message(interaction, content=message)
 
