@@ -131,7 +131,7 @@ def _get_time_to_next_update(guild: discord.Guild):
 
     except Exception as e:
         print(f"Error calculating next update time: {e}")
-    return "Unknown"
+    return "❌ Needs /set-channel"
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
@@ -181,22 +181,49 @@ async def global_rate_limit(ctx):
     _last_command_time = now
     return True
 
+def _build_no_channel_warning_embed() -> discord.Embed:
+    warning_embed = discord.Embed(
+        title="⚠️ Report Channel Not Configured",
+        description="No report channel has been set for this server!",
+        color=discord.Color.red()
+    )
+    warning_embed.add_field(
+        name="How to fix:",
+        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
+        inline=False
+    )
+    return warning_embed
+
+async def notify_missing_channel_setup(guild: discord.Guild):
+    """Best-effort notification that no report channel is configured yet.
+    Tries the system channel first, then any postable text channel, then DMs the owner."""
+    embed = _build_no_channel_warning_embed()
+
+    target = guild.system_channel
+    if not target or not target.permissions_for(guild.me).send_messages:
+        target = discord.utils.find(
+            lambda c: c.permissions_for(guild.me).send_messages,
+            guild.text_channels
+        )
+
+    if target:
+        try:
+            await target.send(embed=embed)
+            return
+        except discord.HTTPException as e:
+            log(guild, f"[WARNING] Failed to send no-channel warning to #{target.name}: {e}")
+
+    try:
+        await guild.owner.send(embed=embed)
+    except (discord.HTTPException, discord.Forbidden, AttributeError) as e:
+        log(guild, f"[WARNING] Failed to DM owner about missing channel config: {e}")
+
 @bot.after_invoke
 async def _check_and_send_warn_no_channel(ctx):
     """Sends a warning message when no report channel is configured."""
 
     if not load_config().get(str(ctx.guild.id)).get('channel_id'):
-        warning_embed = discord.Embed(
-            title="⚠️ Report Channel Not Configured",
-            description=f"No report channel has been set for this server!",
-            color=discord.Color.red()
-        )
-        warning_embed.add_field(
-            name="How to fix:",
-            value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
-            inline=False
-        )
-        await ctx.send(embed=warning_embed)
+        await ctx.send(embed=_build_no_channel_warning_embed())
 
 @bot.event
 async def on_ready():
@@ -277,6 +304,9 @@ async def on_guild_join(guild):
     log(guild, msg)
     start_guild_update_loop(guild)
 
+    if not load_config().get(server_key, {}).get('channel_id'):
+        await notify_missing_channel_setup(guild)
+
 @bot.event
 async def on_guild_remove(guild):
     config = load_config()
@@ -308,7 +338,7 @@ async def on_member_remove(member: discord.Member):
         save_data(data)
         log(member.guild, f"[LEFT] {member.display_name} ({str(member.id)}) left the guild - removed their link from data.")
 
-async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, channel: discord.TextChannel):
+async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
     permanent (bad name/platform) and fails immediately without retrying."""
@@ -450,6 +480,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     await bot.wait_until_ready()
 
     if member.bot:
+        log(guild, f"❌ Trying to update a bot. What the helly.")
         return False
 
     entry = get_player_entry(load_data(), guild.id, member.id)
@@ -460,14 +491,11 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(guild, session, name, platform, channel)
+    stats = await fetch_player_stats(guild, session, name, platform)
 
     if stats is None:
         log(guild, f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
         return False
-
-    # else:
-        # log(guild, f"✅ Data fetch successful for discord: {member.display_name}, link: {name}, {platform}.")
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
@@ -493,7 +521,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     each successful member update - used for live progress reporting (e.g. editing a message).
     """
     guild_config = load_config().get(str(guild.id))
-    channel = bot.get_channel(int(guild_config.get('channel_id'))) if guild_config else None
+    channel = bot.get_channel(int(guild_config.get('channel_id')) if guild_config else None)
 
     log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
 
