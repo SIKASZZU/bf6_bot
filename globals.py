@@ -3,7 +3,7 @@ import json
 import sqlite3
 import os
 import sys
-from discord.ext import commands
+from discord.ext import commands, tasks
 from urllib.parse import urlencode
 
 DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
@@ -13,9 +13,10 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-COMMAND_PREFIX = '!' if not DEV_MODE else 'dev!'
+COMMAND_PREFIX = '/'
 
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
+bot.remove_command('help')
 
 API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
 def build_api_url(name: str, platform: str) -> str:
@@ -37,10 +38,12 @@ DB_CONFIG_FILE  = 'config'
 VALID_PLATFORMS = {'EA'}
 DEFAULT_PLATFORM = 'EA'
 
-AUTO_UPDATE_TIMER_HOURS : int = 1
+AUTO_UPDATE_TIMER_HOURS : int = 3
 
-# TODO: have it check by int somehow id
+# TODO: have it check by int somehow id // lol please fix this shit.
 PERMISSIONED_ROLE: str = 'Admin'
+
+running_loops: dict[int, tasks.Loop] = {}
 
 def log(guild: discord.Guild, message: str):
     def get_caller() -> str:

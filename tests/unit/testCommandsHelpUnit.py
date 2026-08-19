@@ -43,6 +43,10 @@ class TestCommandHelpMessages(unittest.TestCase):
         self.assertInEmbed('/link', message)
         self.assertInEmbed('/update', message)
 
+    def test_build_commands_message_excludes_default_help_command(self):
+        message = helper._build_commands_message()
+        self.assertNotInEmbed('!help', message)
+
     def test_build_links_message_includes_linked_accounts(self):
         data = {
             '123': {

@@ -36,6 +36,7 @@ async def create_roles(guild: discord.Guild):
 
     created = []
     skipped = []
+    failed = []
 
     for rank_name in r_dict.keys():
         if rank_name in existing_role_names:
@@ -49,9 +50,13 @@ async def create_roles(guild: discord.Guild):
                 reason="Auto-created by bot for rank system"
             )
             created.append(rank_name)
+
         except discord.Forbidden:
             log(guild, f"Missing permissions to create role: {rank_name}")
+            failed.append(rank_name)
+
         except discord.HTTPException as e:
             log(guild, f"Failed to create role {rank_name}: {e}")
+            failed.append(rank_name)
 
-    return created, skipped
+    return created, skipped, failed
