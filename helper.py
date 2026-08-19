@@ -523,7 +523,11 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     guild_config = load_config().get(str(guild.id))
     channel = bot.get_channel(int(guild_config.get('channel_id')) if guild_config else None)
 
-    log(guild, f"[START AUTOMATIC UPDATE] [{guild.name}]")
+    if not channel:
+        log(guild, f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
+        return
+
+    log(guild, f"[START AUTOMATIC UPDATE]")
 
     updated_count = 0
     failed_to_update: list = []
