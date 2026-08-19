@@ -200,18 +200,18 @@ async def notify_missing_channel_setup(guild: discord.Guild):
     embed = _build_no_channel_warning_embed()
 
     target = guild.system_channel
-    if not target or not target.permissions_for(guild.me).send_messages:
-        target = discord.utils.find(
-            lambda c: c.permissions_for(guild.me).send_messages,
-            guild.text_channels
-        )
-
     if target:
         try:
             await target.send(embed=embed)
             return
         except discord.HTTPException as e:
             log(guild, f"[WARNING] Failed to send no-channel warning to #{target.name}: {e}")
+
+    if not target or not target.permissions_for(guild.me).send_messages:
+        target = discord.utils.find(
+            lambda c: c.permissions_for(guild.me).send_messages,
+            guild.text_channels
+        )
 
     try:
         await guild.owner.send(embed=embed)
@@ -289,8 +289,8 @@ async def on_guild_join(guild):
 
     if server_key not in config:
         config[server_key] = {
-            "channel_id": None,
-            "update_interval": 1
+            "channel_id": guild._system_channel_id,
+            "update_interval": AUTO_UPDATE_TIMER_HOURS
         }
         save_config(config)
         msg += f"Initialized default config configuration for server.\n"
@@ -303,9 +303,6 @@ async def on_guild_join(guild):
 
     log(guild, msg)
     start_guild_update_loop(guild)
-
-    if not load_config().get(server_key, {}).get('channel_id'):
-        await notify_missing_channel_setup(guild)
 
 @bot.event
 async def on_guild_remove(guild):
@@ -520,11 +517,11 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     on_progress, if given, is an async callable(updated_count, total_linked) invoked after
     each successful member update - used for live progress reporting (e.g. editing a message).
     """
-    guild_config = load_config().get(str(guild.id))
-    channel = bot.get_channel(guild_config.get('channel_id') if guild_config else None)
 
+    channel = bot.get_channel(load_config().get(str(guild.id)).get('channel_id'))
     if not channel:
         log(guild, f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
+        await notify_missing_channel_setup(guild)
         return
 
     log(guild, f"[START AUTOMATIC UPDATE]")
