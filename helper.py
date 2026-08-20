@@ -431,95 +431,109 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
         #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
-async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name:str, channel: discord.TextChannel = None):
-    current_role_names = {role.name for role in member.roles}
-    for role_name in get_role_dict().keys():
-        if role_name not in current_role_names:
-            continue
-        if role_name == current_rank_name:
-            continue
+async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str, channel: discord.TextChannel = None):
+    """Removes all obsolete rank roles from a member, keeping only their current rank role."""
+    all_rank_names = get_role_dict().keys()
 
-        role_cls = await get_role(guild, role_name)
-        if isinstance(role_cls, str):
-            role_cls = discord.utils.get(guild.roles, name=role_cls)
+    # Identify obsolete roles the member currently holds
+    roles_to_remove = [
+        role for role in member.roles
+        if role.name in all_rank_names and role.name != current_rank_name
+    ]
 
-        if role_cls is None or (not hasattr(role_cls, "name") and not isinstance(role_cls, str)):
-            log(guild, f'Returning! role_cls is not a valid role object: {role_cls!r}')
-            continue
+    if not roles_to_remove:
+        log(guild, msg := f"No obsolete rank roles to remove for {member.display_name}.")
+        return {"success": True, "value": msg}
 
-        log(guild, f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
+    try:
+        await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
+        removed_names = ", ".join(role.name for role in roles_to_remove)
+        log(guild, msg := f"Removed roles [{removed_names}] from {member.display_name}")
+        return {"success": True, "value": msg}
 
-        await member.remove_roles(role_cls, reason='Rank sync - removing role')
+    except discord.Forbidden:
+        log(guild, msg := f"Missing permissions to remove roles from {member.display_name}")
+        return {"success": False, "value": msg}
 
-        # if channel:
-        #     await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
+    except discord.HTTPException as e:
+        log(guild, msg := f"Failed to remove roles from {member.display_name}: {e}")
+        return {"success": False, "value": msg}
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
-        log(guild, 'Returning! rank_name is None.')
-        return
+        log(guild, return_msg := 'Returning! rank_name is None.')
+        return {"success": False, "value": return_msg}
 
-    role = await get_role(guild, rank_name, channel)
-    if role is None:
-        log(guild, 'Returning! Role is None.')
-        return
+    if not (role := await get_role(guild, rank_name, channel)):
+        log(guild, return_msg := 'Returning! Role is None.')
+        return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
-        # if channel:
-        #     await channel.send(f"❌ Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
-        return
+        log(guild, return_msg := f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
+        return {"success": False, "value": return_msg}
 
     try:
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, f"Assigned {rank_name} to {member.display_name}")
-            # if channel:
-            #     await channel.send(f"✅ Assigned `{rank_name}` to `{member.display_name}`")
-            return
+            log(guild, return_msg := f"Assigned {rank_name} to {member.display_name}")
+            return {"success": True, "value": return_msg}
 
     except discord.Forbidden:
-        log(guild, f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
+        log(guild, return_msg := f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
+        return {"success": False, "value": return_msg}
 
     except discord.HTTPException as e:
-        log(guild, f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+
+        log(guild, return_msg := f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+        return {"success": False, "message": return_msg}
+
+    return {"success": False, "message": 'Reached end of function'}
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession, channel: discord.TextChannel):
-    """Update a single member's rank. """
+    """
+    Updates a single member's Discord rank roles based on their linked external game stats.
+
+    Steps:
+    1. Validates member eligibility (skips bots and unlinked accounts).
+    2. Fetches external player stats and resolves their career rank name.
+    3. Assigns the new rank role and strips obsolete rank roles in the guild.
+
+    Returns:
+        dict: A status map containing {'success': bool} along with 'value' (details),
+              plus role update results on success.
+    """
     await bot.wait_until_ready()
 
-    if member.bot:
-        log(guild, f"❌ Trying to update a bot. What the helly.")
-        return False
+    return_msg = {'success': True}
 
-    entry = get_player_entry(load_data(), guild.id, member.id)
-    if not entry:
-        log(guild, f"❌ discord: {member.display_name}. Not linked. Skipping.")
-        return False
+    if member.bot:
+        log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
+        return return_msg | {'success': False, 'value': fail_msg}
+
+    if not (entry := get_player_entry(load_data(), guild.id, member.id)):
+        log(guild, fail_msg := f"❌ discord: {member.display_name}. Not linked. Skipping.")
+        return return_msg | {'success': False, 'value': fail_msg}
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(guild, session, name, platform)
-
-    if stats is None:
-        log(guild, f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
-        return False
+    if not (stats := await fetch_player_stats(guild, session, name, platform)):
+        log(guild, fail_msg := f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
+        return return_msg | {'success': False, 'value': fail_msg}
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        log(guild, f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
-        return False
+        log(guild, fail_msg := f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
+        return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
+    log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
-    log(guild, f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+    return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name, channel)
+    return_msg['remove_rank_role'] = await remove_rank_role(guild, member, concise_rank_name, channel)
 
-    await assign_rank_role(guild, member, concise_rank_name, channel)
-    await remove_rank_role(guild, member, concise_rank_name, channel)
-
-    return True
+    return return_msg | {'value': success_msg}
 
 async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
@@ -545,13 +559,14 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
             member = guild.get_member(int(member_id))
 
             try:
-                updated: bool = await _update_member(guild, member, session, channel)
+                return_value: dict = await _update_member(guild, member, session, channel)
+                updated: bool = return_value['success']
 
                 if on_progress:
                     await on_progress(updated_count, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not updated:
-                    raise Exception('_update_member failed to update.')
+                    raise Exception(return_value['value'])
 
                 updated_count += 1
 
@@ -563,6 +578,14 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
     return failed_to_update
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
+    if not interval_hours:
+        log(bot.get_guild(guild_id), f'{interval_hours} is not valid. Returning.')
+        return
+
+    if not guild_id:
+        log(bot.get_guild(guild_id), f'{guild_id} is not valid. Returning.')
+        return
+
     @tasks.loop(hours=interval_hours)
     async def _loop():
         await bot.wait_until_ready()
@@ -579,10 +602,6 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
 def start_guild_update_loop(guild: discord.Guild):
     """Starts (or restarts) the automatic update loop for one guild, using its configured interval."""
-    existing = running_loops.get(guild.id)
-    if existing and existing.is_running():
-        return
-
     loop = _make_guild_update_loop(guild.id, load_config().get(str(guild.id)).get('update_interval'))
     running_loops[guild.id] = loop
     loop.start()

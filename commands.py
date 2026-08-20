@@ -54,9 +54,18 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         # update only the requested target by checking if member was given.
         if member:
             async with aiohttp.ClientSession() as session:
-                if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
-                    log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
-                    await interaction.edit_original_response(content=f"✅ Player update completed successfully for `{target.display_name}`!")
+                return_value: dict = await helper._update_member(interaction.guild, target, session, channel=interaction.channel)
+
+                if return_value['success']:
+
+                    await interaction.edit_original_response(
+                        content = ', '.join([
+                            return_value['value'],
+                            return_value['assign_rank_role']['message'],
+                            return_value['remove_rank_role']['message']
+                        ])
+                    )
+
                 else:
                     raise Exception(f'_update_member failed for discord member: `{target.display_name}`')
             return
