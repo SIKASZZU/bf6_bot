@@ -37,25 +37,22 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     else:
         await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
 
-#TODO: update everybody by default.
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member',
-    update_everybody='Update all members that have been linked.'
 )
-async def force_update(interaction: discord.Interaction, member: discord.Member = None, update_everybody: bool = False):
+async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
-    member_name = member.display_name if member else "None"
-
     await helper.send_interaction_message(interaction, f'🔄 Updating...')
-    log(interaction.guild, f'(Updating... arguments: member: `{member_name}`, update_everybody: `{update_everybody}`)')
+    log(interaction.guild, f'(Updating... arguments: member: `{member.display_name if member else 'None'}`')
 
     target = member or interaction.user
 
     try:
-        if not update_everybody:
+        # update only the requested target by checking if member was given.
+        if member:
             async with aiohttp.ClientSession() as session:
                 if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
                     log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
@@ -64,6 +61,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                     raise Exception(f'_update_member failed for discord member: `{target.display_name}`')
             return
 
+        # update everybody
         last_edit = 0.0
         async def report_progress(done: int, total: int, is_last: bool):
             nonlocal last_edit
@@ -85,7 +83,6 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         log(interaction.guild, f"Manual update error: {e}")
         await interaction.edit_original_response(content=f"❌ An error occurred during the update: {e}")
 
-#TODO: create roles
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 @helper.is_admin_or_has_role()
 async def setup_roles(interaction: discord.Interaction):
@@ -107,7 +104,7 @@ async def setup_roles(interaction: discord.Interaction):
         if failed:
             message.add_field(
                 name="❌ Missing permissions",
-                value=", ".join(failed) + "\n_Move the bot's role above these ranks (or grant Manage Roles), then run `/create-roles` again._",
+                value=", ".join(failed) + f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._",
                 inline=False
             )
             message.color = discord.Color.orange()
@@ -251,7 +248,7 @@ async def display_setup(interaction: discord.Interaction):
 
     message.add_field(
         name="Step 1️⃣: Create Rank Roles",
-        value=f"Administrator runs: `{COMMAND_PREFIX}setup-roles`\nThis creates roles for each BF6 rank.",
+        value=f"Administrator runs: `{COMMAND_PREFIX}create-roles`\nThis creates roles for each BF6 rank.",
         inline=False
     )
 

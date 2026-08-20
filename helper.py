@@ -17,7 +17,6 @@ def load_data() -> dict:
 
 def save_data(data: dict):
     if not isinstance(data, dict):
-        # TODO: figure out how to remove print?
         print('Returning! No data provided for save_data.')
         return
 
@@ -133,7 +132,7 @@ def _get_time_to_next_update(guild: discord.Guild):
 
     except Exception as e:
         print(f"Error calculating next update time: {e}")
-    return "❌ Needs /set-channel"
+        return "❌ Needs /set-channel"
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
@@ -242,7 +241,6 @@ async def _check_and_send_warn_no_channel(ctx):
 
 @bot.event
 async def on_ready():
-    #TODO: fix print here maybbe
     print(f"Logged in as {bot.user.name}!")
 
     for guild in bot.guilds:

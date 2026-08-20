@@ -75,7 +75,6 @@ def load_config() -> dict:
 
 def save_config(config: dict):
     if not isinstance(config, dict):
-        # TODO: figure out how to remove print?
         print('Returning! No config provided for save_config.')
         return
 
