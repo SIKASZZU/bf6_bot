@@ -1,7 +1,7 @@
 import json
 import aiohttp
 import time
-from discord.ext import commands, tasks
+from discord.ext import commands, tasks, app_commands
 import asyncio
 import datetime
 
@@ -70,7 +70,7 @@ def _build_commands_message():
 
     return embed
 
-def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
+def _build_linked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
     embed = discord.Embed(
@@ -114,6 +114,7 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
         embed.description = "\n".join(lines)
     return embed
 
+# TODO: siin on bug, kui on interval 1 h siis failib displaymast
 def _get_time_to_next_update(guild: discord.Guild):
     try:
         loop = running_loops.get(guild.id)
@@ -161,13 +162,15 @@ _last_command_time = 0
 REQUEST_INTERVAL_SECONDS = 2
 
 def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
-    """Passes if the invoking user is a server administrator OR has the given role."""
-    def predicate(ctx: commands.Context) -> bool:
-        if ctx.author.guild_permissions.administrator:
+    """Passes if the invoking user is a server administrator OR has the given role.
+    All commands are slash commands, so this must be an app_commands check
+    (interaction-based), not commands.check (ctx-based, silently a no-op here)."""
+    def predicate(interaction: discord.Interaction) -> bool:
+        if interaction.user.guild_permissions.administrator:
             return True
-        return discord.utils.get(ctx.author.roles, name=role_name) is not None
+        return discord.utils.get(interaction.user.roles, name=role_name) is not None
 
-    return commands.check(predicate)
+    return app_commands.check(predicate)
 
 @bot.check
 async def global_rate_limit(ctx):

@@ -47,7 +47,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         message = helper._build_commands_message()
         self.assertNotInEmbed('!help', message)
 
-    def test_build_links_message_includes_linked_accounts(self):
+    def test_build_linked_message_includes_linked_accounts(self):
         data = {
             '123': {
                 '456': {'name': 'alice', 'platform': 'EA'}
@@ -55,18 +55,18 @@ class TestCommandHelpMessages(unittest.TestCase):
         }
 
         fake_guild = FakeGuild(id=123)
-        message = helper._build_links_message(fake_guild, data)
+        message = helper._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('EA', message)
         self.assertInEmbed('456', message)
 
-    def test_build_links_message_uses_display_name_when_member_found(self):
+    def test_build_linked_message_uses_display_name_when_member_found(self):
         data = {'123': {'456': {'name': 'alice', 'platform': 'EA'}}}
         member = FakeMember(id=456, display_name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
-        message = helper._build_links_message(fake_guild, data)
+        message = helper._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('CoolPlayer', message)
         self.assertNotInEmbed('<left server>', message)

@@ -37,7 +37,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     else:
         await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
 
-
+#TODO: update everybody by default.
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @helper.is_admin_or_has_role()
 @app_commands.describe(
@@ -61,7 +61,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                     log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
                     await interaction.edit_original_response(content=f"✅ Player update completed successfully for `{target.display_name}`!")
                 else:
-                    raise Exception(f'Failed to update for discord: `{target.display_name}`')
+                    raise Exception(f'_update_member failed for discord member: `{target.display_name}`')
             return
 
         last_edit = 0.0
@@ -85,13 +85,14 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         log(interaction.guild, f"Manual update error: {e}")
         await interaction.edit_original_response(content=f"❌ An error occurred during the update: {e}")
 
-@bot.tree.command(name='setup-roles', description='Creates all possible career rank roles for bot to assign.')
+#TODO: create roles
+@bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 @helper.is_admin_or_has_role()
 async def setup_roles(interaction: discord.Interaction):
     created, skipped, failed = await create_roles(interaction.guild)
 
     message = discord.Embed(
-        title="⚙️ Role Setup",
+        title="⚙️ Role Creation",
         color=discord.Color.green()
     )
 
@@ -106,14 +107,15 @@ async def setup_roles(interaction: discord.Interaction):
         if failed:
             message.add_field(
                 name="❌ Missing permissions",
-                value=", ".join(failed) + "\n_Move the bot's role above these ranks (or grant Manage Roles), then run `/setup-roles` again._",
+                value=", ".join(failed) + "\n_Move the bot's role above these ranks (or grant Manage Roles), then run `/create-roles` again._",
                 inline=False
             )
             message.color = discord.Color.orange()
 
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='set-channel', description='Bot will default to talking to this the set channel.')
+#TODO: test this shit
+@bot.tree.command(name='set-channel', description='Bot will default to talking in this channel.')
 @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
     config = load_config()
@@ -127,6 +129,7 @@ async def set_channel(interaction: discord.Interaction):
     )
     await helper.send_interaction_message(interaction, content=message)
 
+# TODO: broken when set to 1 hour.
 @bot.tree.command(name='set-update-interval', description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
 @helper.is_admin_or_has_role()
 @app_commands.describe(
@@ -161,12 +164,12 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
 async def display_commands(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_commands_message())
 
-@bot.tree.command(name='links', description=f'Have all the links be displayed.')
+@bot.tree.command(name='linked', description=f'Have all the links be displayed.')
 @helper.is_admin_or_has_role()
 async def display_links(interaction: discord.Interaction):
-    await helper.send_interaction_message(interaction, content=helper._build_links_message(interaction.guild, helper.load_data()))
+    await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data()))
 
-@bot.tree.command(name='unlinks', description=f'Have all the unlinked members be displayed.')
+@bot.tree.command(name='unlinked', description=f'Have all the unlinked members be displayed.')
 @helper.is_admin_or_has_role()
 async def display_unlinks(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_unlinked_message(interaction.guild, helper.load_data()))
