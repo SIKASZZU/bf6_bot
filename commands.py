@@ -61,8 +61,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                     await interaction.edit_original_response(
                         content = ', '.join([
                             return_value['value'],
-                            return_value['assign_rank_role']['message'],
-                            return_value['remove_rank_role']['message']
+                            return_value['assign_rank_role']['value'],
+                            return_value['remove_rank_role']['value']
                         ])
                     )
 
@@ -120,7 +120,6 @@ async def setup_roles(interaction: discord.Interaction):
 
     await helper.send_interaction_message(interaction, content=message)
 
-#TODO: test this shit
 @bot.tree.command(name='set-channel', description='Bot will default to talking in this channel.')
 @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
@@ -135,7 +134,6 @@ async def set_channel(interaction: discord.Interaction):
     )
     await helper.send_interaction_message(interaction, content=message)
 
-# TODO: broken when set to 1 hour.
 @bot.tree.command(name='set-update-interval', description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
 @helper.is_admin_or_has_role()
 @app_commands.describe(
