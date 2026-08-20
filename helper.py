@@ -183,8 +183,7 @@ def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
 
     return app_commands.check(predicate)
 
-@bot.tree.interaction_check
-async def global_rate_limit():
+async def global_rate_limit(interaction: discord.Interaction):
     global _last_command_time
     now = time.monotonic() # lol wtf
 
@@ -194,6 +193,8 @@ async def global_rate_limit():
 
     _last_command_time = now
     return True
+
+bot.tree.interaction_check = global_rate_limit
 
 def _build_no_channel_warning_embed() -> discord.Embed:
     warning_embed = discord.Embed(
@@ -448,7 +449,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
         removed_names = ", ".join(role.name for role in roles_to_remove)
-        log(guild, msg := f"Removed roles [{removed_names}] from {member.display_name}")
+        log(guild, msg := f"Removed roles: {removed_names}.")
         return {"success": True, "value": msg}
 
     except discord.Forbidden:
@@ -476,7 +477,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
     try:
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned {rank_name} to {member.display_name}")
+            log(guild, return_msg := f"Assigned rank: {rank_name}.")
             return {"success": True, "value": return_msg}
 
     except discord.Forbidden:
@@ -519,7 +520,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
     if not (stats := await fetch_player_stats(guild, session, name, platform)):
-        log(guild, fail_msg := f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
+        log(guild, fail_msg := f"⚠️ Data fetch failed for discord: `{member.display_name}`. If link for member is correct, do not stress. API failure.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     rankValue, _ = get_level_and_rank(stats)

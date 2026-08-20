@@ -67,7 +67,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                     )
 
                 else:
-                    raise Exception(f'_update_member failed for discord member: `{target.display_name}`')
+                    raise Exception(f'Update fail for `{target.display_name}`. {return_value['value']}')
             return
 
         # update everybody
@@ -88,8 +88,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         await interaction.edit_original_response(content=f"✅ Update successful. {return_value['value']}")
 
     except Exception as e:
-        log(interaction.guild, f"Manual update error: {e}")
-        await interaction.edit_original_response(content=f"❌ An error occurred during the update: {e}")
+        log(interaction.guild, fail_msg := f'❌ {e}')
+        await interaction.edit_original_response(content=fail_msg)
 
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 @helper.is_admin_or_has_role()
