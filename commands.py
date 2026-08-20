@@ -80,13 +80,12 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             last_edit = now
             await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
 
-        failed_to_update: list = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
 
-        if failed_to_update:
-            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {", ".join(failed_to_update)}.")
+        if not (return_value := await helper._run_guild_update(interaction.guild, on_progress=report_progress))['success']:
+            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {return_value['value']}.")
             return
 
-        await interaction.edit_original_response(content=f"✅ Update successful.")
+        await interaction.edit_original_response(content=f"✅ Update successful. {return_value['value']}")
 
     except Exception as e:
         log(interaction.guild, f"Manual update error: {e}")

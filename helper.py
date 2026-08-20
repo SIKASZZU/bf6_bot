@@ -535,7 +535,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return return_msg | {'value': success_msg}
 
-async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
+async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
 
@@ -545,15 +545,16 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
 
     channel = bot.get_channel(load_config().get(str(guild.id)).get('channel_id'))
     if not channel:
-        log(guild, f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
         await notify_missing_channel_setup(guild)
-        return
+        log(guild, fail_msg := f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
+        return {'success': True, 'value': fail_msg}
 
     log(guild, f"[START AUTOMATIC UPDATE]")
 
-    updated_count = 0
     failed_to_update: list = []
+    success_to_update: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
+
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
@@ -563,19 +564,26 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
                 updated: bool = return_value['success']
 
                 if on_progress:
-                    await on_progress(updated_count, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
+                    await on_progress(len(success_to_update), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not updated:
                     raise Exception(return_value['value'])
 
-                updated_count += 1
+                success_to_update.append(member.display_name)
 
             except Exception as e:
                 failed_to_update.append(member.display_name)
-                log(guild, f"❌ [ERROR] Update failed for discord: {member.display_name}, skipping: {e}")
+                log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, skipping: {e}")
 
-    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
-    return failed_to_update
+    log(guild,
+        f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}.\
+        Failed with {len(failed_to_update)}member{'' if len(failed_to_update) == 1 else 's'}"
+    )
+
+    if failed_to_update:
+        return {'success': False, 'value': ', '.join(failed_to_update)}
+
+    return {'success': True, 'value': ', '.join(success_to_update)}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
     if not interval_hours:
