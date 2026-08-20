@@ -427,8 +427,8 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
 
     if role is None:
         log(guild, 'Missing role!')
-        if channel:
-            await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
+        # if channel:
+        #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name:str, channel: discord.TextChannel = None):
@@ -451,8 +451,8 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
         await member.remove_roles(role_cls, reason='Rank sync - removing role')
 
-        if channel:
-            await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
+        # if channel:
+        #     await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
@@ -467,16 +467,16 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
 
     if role.position >= guild.me.top_role.position:
         log(guild, f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
-        if channel:
-            await channel.send(f"❌ Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
+        # if channel:
+        #     await channel.send(f"❌ Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
         return
 
     try:
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
             log(guild, f"Assigned {rank_name} to {member.display_name}")
-            if channel:
-                await channel.send(f"✅ Assigned `{rank_name}` to `{member.display_name}`")
+            # if channel:
+            #     await channel.send(f"✅ Assigned `{rank_name}` to `{member.display_name}`")
             return
 
     except discord.Forbidden:
@@ -510,8 +510,6 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
         log(guild, f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
-        if channel:
-            await channel.send(f"⚠️ Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
         return False
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
