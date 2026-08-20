@@ -1,7 +1,8 @@
 import json
 import aiohttp
 import time
-from discord.ext import commands, tasks, app_commands
+from discord.ext import commands, tasks
+from discord import app_commands
 import asyncio
 import datetime
 
@@ -161,6 +162,17 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
 _last_command_time = 0
 REQUEST_INTERVAL_SECONDS = 2
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Catches errors from slash commands (on_command_error above only fires for prefix commands)."""
+
+    if isinstance(error, app_commands.CheckFailure):
+        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `{PERMISSIONED_ROLE}` role.", ephemeral=True)
+        return
+
+    log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
+    await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
+
 def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
     """Passes if the invoking user is a server administrator OR has the given role.
     All commands are slash commands, so this must be an app_commands check
@@ -172,8 +184,8 @@ def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
 
     return app_commands.check(predicate)
 
-@bot.check
-async def global_rate_limit(ctx):
+@bot.tree.interaction_check
+async def global_rate_limit():
     global _last_command_time
     now = time.monotonic() # lol wtf
 
