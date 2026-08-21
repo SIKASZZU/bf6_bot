@@ -208,10 +208,11 @@ async def display_info(interaction: discord.Interaction):
     )
 
     # Setup Status
-    channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured. Use /set-channel so bot reports information there."
+    channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured. Use /set-channel."
+    authorised_role = interaction.guild.get_role(guild_config.get('permissioned_role_id')) if guild_config.get('permissioned_role_id') else "❌ Not configured. Use /set-authorised-role."
     message.add_field(
         name="⚙️ Configuration",
-        value=f"Report channel: {channel_status}",
+        value=f"Report channel: {channel_status}\nAuthorised role: {authorised_role}",
         inline=False
     )
 

@@ -203,7 +203,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
     await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
 
-def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
+def is_admin_or_has_role():
     """Passes if the invoking user is a server administrator OR has the management role."""
     def predicate(interaction: discord.Interaction) -> bool:
         if interaction.user.guild_permissions.administrator:
