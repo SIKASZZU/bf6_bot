@@ -429,7 +429,7 @@ def get_level_and_rank(stats: dict):
 
     return rank, rank_name
 
-async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextChannel = None):
+async def get_role(guild: discord.Guild, rank_name: str):
     """Finds a role matching rank_name."""
     if not rank_name:
         log(guild, f"Failed to find rank_name: {rank_name}")
@@ -452,7 +452,7 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
         #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
-async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str, channel: discord.TextChannel = None) -> dict:
+async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
     """Removes all obsolete rank roles from a member, keeping only their current rank role."""
     all_rank_names = get_role_dict().keys()
 
@@ -476,13 +476,13 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         log(guild, return_msg := f"Remove rank error: {e}")
         return {"success": False, "value": return_msg}
 
-async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None) -> dict:
+async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str) -> dict:
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
         log(guild, return_msg := 'Returning! rank_name is None.')
         return {"success": False, "value": return_msg}
 
-    if not (role := await get_role(guild, rank_name, channel)):
+    if not (role := await get_role(guild, rank_name)):
         log(guild, return_msg := 'Returning! Role is None.')
         return {"success": False, "value": return_msg}
 
@@ -503,7 +503,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         log(guild, return_msg := f"Assign role error: {e}")
         return {"success": False, "value": return_msg}
 
-async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession, channel: discord.TextChannel):
+async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession):
     """
     Updates a single member's Discord rank roles based on their linked external game stats.
 
@@ -543,11 +543,11 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
     log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
-    return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name, channel)
+    return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
         return return_msg | {'success': False, 'value': return_msg['assign_rank_role']['value'] }
 
-    return_msg['remove_rank_role'] = await remove_rank_role(guild, member, concise_rank_name, channel)
+    return_msg['remove_rank_role'] = await remove_rank_role(guild, member, concise_rank_name)
     if not return_msg['remove_rank_role']['success']:
         return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
 
@@ -576,7 +576,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
             member = guild.get_member(int(member_id))
 
             try:
-                return_value: dict = await _update_member(guild, member, session, channel)
+                return_value: dict = await _update_member(guild, member, session)
                 updated: bool = return_value['success']
 
                 if on_progress:

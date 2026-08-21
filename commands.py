@@ -56,7 +56,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         # update only the requested target by checking if member was given.
         if member:
             async with aiohttp.ClientSession() as session:
-                return_value: dict = await helper._update_member(interaction.guild, target, session, channel=interaction.channel)
+                return_value: dict = await helper._update_member(interaction.guild, target, session)
 
                 if return_value['success']:
 
