@@ -17,16 +17,16 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 
     await interaction.response.defer()
 
-    if member.bot:
+    target = member or interaction.user
+
+    if target.bot:
         await helper.send_interaction_message(interaction, f"❌ Dude. Why assign to bot someone's account? I hereby refuse.")
         return
 
     platform = DEFAULT_PLATFORM
-    if platform not in VALID_PLATFORMS:
-        await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
-        return
-
-    target = member or interaction.user
+    # if platform not in VALID_PLATFORMS:
+    #     await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
+    #     return
 
     data = helper.load_data()
     data.setdefault(str(interaction.guild.id))[str(target.id)] = {"name": name, "platform": platform}
