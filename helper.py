@@ -197,7 +197,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     """Catches errors from slash commands (on_command_error above only fires for prefix commands)."""
 
     if isinstance(error, app_commands.CheckFailure):
-        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `{PERMISSIONED_ROLE}` role.", ephemeral=True)
+        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
         return
 
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
