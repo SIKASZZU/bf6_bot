@@ -173,16 +173,15 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
 
 def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
-    """Passes if the invoking user is a server administrator OR has the given role.
-    All commands are slash commands, so this must be an app_commands check
-    (interaction-based), not commands.check (ctx-based, silently a no-op here)."""
+    """Passes if the invoking user is a server administrator OR has the management role."""
     def predicate(interaction: discord.Interaction) -> bool:
         if interaction.user.guild_permissions.administrator:
             return True
-        return discord.utils.get(interaction.user.roles, name=role_name) is not None
+
+        if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
+            return discord.utils.get(interaction.user.roles, id=role_id) is not None
 
     return app_commands.check(predicate)
-
 async def global_rate_limit(interaction: discord.Interaction):
     global _last_command_time
     now = time.monotonic() # lol wtf
@@ -432,7 +431,7 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
         #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
-async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str, channel: discord.TextChannel = None):
+async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str, channel: discord.TextChannel = None) -> dict:
     """Removes all obsolete rank roles from a member, keeping only their current rank role."""
     all_rank_names = get_role_dict().keys()
 
@@ -460,7 +459,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         log(guild, msg := f"Failed to remove roles from {member.display_name}: {e}")
         return {"success": False, "value": msg}
 
-async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
+async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None) -> dict:
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
         log(guild, return_msg := 'Returning! rank_name is None.')
@@ -478,18 +477,19 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
             log(guild, return_msg := f"Assigned rank: {rank_name}.")
-            return {"success": True, "value": return_msg}
+        else:
+            log(guild, return_msg := f"Already has rank: {rank_name}.")
+
+        return {"success": True, "value": return_msg}
 
     except discord.Forbidden:
         log(guild, return_msg := f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
         return {"success": False, "value": return_msg}
 
     except discord.HTTPException as e:
-
         log(guild, return_msg := f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
-        return {"success": False, "message": return_msg}
+        return {"success": False, "value": return_msg}
 
-    return {"success": False, "message": 'Reached end of function'}
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession, channel: discord.TextChannel):
     """

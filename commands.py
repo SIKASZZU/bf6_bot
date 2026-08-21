@@ -321,6 +321,47 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     )
     await helper.send_interaction_message(interaction, content=message)
 
+@bot.tree.command(name='assign-management-role', description="(Administrator*) Allow a role to use bot's commands. (max 1 role)")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    role='Role that should be allowed to use bot commands.'
+    )
+async def assign_management_role(interaction: discord.Interaction, role: discord.Role):
+    config = load_config()
+    config.setdefault(str(interaction.guild.id))['permissioned_role_id'] = role.id
+    save_config(config)
+
+    log(interaction.guild, f"Management role set to '{role.name}' ({role.id}) by {interaction.user.display_name}")
+
+    message = discord.Embed(
+        title="✅ Management Role Set",
+        description=f"{role.mention} can now use the bot's commands (in addition to server Administrators).",
+        color=discord.Color.green()
+    )
+    await helper.send_interaction_message(interaction, content=message)
+
+@bot.tree.command(name='display-management-role', description="Display management role.")
+@helper.is_admin_or_has_role()
+async def display_management_role(interaction: discord.Interaction):
+
+
+    message = discord.Embed(
+        title="🔑 Management Role",
+        color=discord.Color.blue()
+    )
+
+    if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
+        role = interaction.guild.get_role(role_id)
+        if role:
+            message.description = f"{role.mention} (and server Administrators) can use the bot's commands."
+        else:
+            message.description = f"⚠️ The configured role (ID `{role_id}`) no longer exists on this server. Run `/assign-management-role` to set a new one."
+            message.color = discord.Color.orange()
+    else:
+        message.description = f"No management role has been set yet. Run `/assign-management-role` to set one explicitly."
+
+    await helper.send_interaction_message(interaction, content=message)
+
 # @bot.tree.command(name='time-until-update', description='Shows the time until the next automatic update.')
 # @helper.is_admin_or_has_role()
 # async def show_time_to_update(interaction: discord.Interaction):
