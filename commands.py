@@ -33,9 +33,11 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     helper.save_data(data)
 
     if target.id == interaction.user.id:
-        await helper.send_interaction_message(interaction, f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, msg := f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
     else:
-        await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, msg := f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
+
+    log(interaction.guild, msg)
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @helper.is_admin_or_has_role()
