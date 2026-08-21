@@ -212,7 +212,7 @@ async def display_info(interaction: discord.Interaction):
     authorised_role = interaction.guild.get_role(guild_config.get('permissioned_role_id')) if guild_config.get('permissioned_role_id') else "❌ Not configured. Use /set-authorised-role."
     message.add_field(
         name="⚙️ Configuration",
-        value=f"Report channel: {channel_status}\nAuthorised role: {authorised_role}",
+        value=f"Report channel: {channel_status}\nAuthorised role: <#{authorised_role}>",
         inline=False
     )
 
