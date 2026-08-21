@@ -457,7 +457,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, return_msg := f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
+        log(guild, return_msg := f"Bot's role is too low to assign '{rank_name}' - move the bot's role higher.")
         return {"success": False, "value": return_msg}
 
     try:
@@ -519,7 +519,12 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name, channel)
+    if not return_msg['assign_rank_role']['success']:
+        return return_msg | {'success': False, 'value': return_msg['assign_rank_role']['value'] }
+
     return_msg['remove_rank_role'] = await remove_rank_role(guild, member, concise_rank_name, channel)
+    if not return_msg['remove_rank_role']['success']:
+        return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
 
     return return_msg | {'value': success_msg}
 
