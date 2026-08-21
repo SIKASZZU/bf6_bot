@@ -160,7 +160,7 @@ async def _warn_user_if_no_channel(interaction: discord.Interaction):
     try:
         # await interaction.user.send(embed=_build_no_channel_warning_embed())
         await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
-    except (discord.HTTPException, discord.Forbidden) as e:
+    except Exception as e:
         log(interaction.guild, f"[WARNING] Failed to DM {interaction.user.display_name} about missing channel config: {e}")
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
@@ -197,7 +197,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     """Catches errors from slash commands (on_command_error above only fires for prefix commands)."""
 
     if isinstance(error, app_commands.CheckFailure):
-        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `{PERMISSIONED_ROLE}` role.", ephemeral=True)
+        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
         return
 
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
@@ -438,13 +438,9 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         log(guild, msg := f"Removed roles: {removed_names}.")
         return {"success": True, "value": msg}
 
-    except discord.Forbidden:
-        log(guild, msg := f"Missing permissions to remove roles")
-        return {"success": False, "value": msg}
-
-    except discord.HTTPException as e:
-        log(guild, msg := f"Failed to remove roles: {e}")
-        return {"success": False, "value": msg}
+    except Exception as e:
+        log(guild, return_msg := f"Remove rank error: {e}")
+        return {"success": False, "value": return_msg}
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None) -> dict:
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
@@ -469,12 +465,8 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
 
         return {"success": True, "value": return_msg}
 
-    except discord.Forbidden:
-        log(guild, return_msg := f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
-        return {"success": False, "value": return_msg}
-
-    except discord.HTTPException as e:
-        log(guild, return_msg := f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+    except Exception as e:
+        log(guild, return_msg := f"Assign role error: {e}")
         return {"success": False, "value": return_msg}
 
 
@@ -565,7 +557,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
 
             except Exception as e:
                 failed_to_update.append(member.display_name)
-                log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, skipping: {e}")
+                log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, error: {e}")
 
     log(guild,
         f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}.\
