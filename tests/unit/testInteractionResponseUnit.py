@@ -25,6 +25,7 @@ class FakeFollowup:
 
 class FakeInteraction:
     def __init__(self, is_done=False):
+        self.guild = None
         self.response = FakeResponse(is_done=is_done)
         self.followup = FakeFollowup()
 
