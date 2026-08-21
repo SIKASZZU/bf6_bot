@@ -442,7 +442,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
     ]
 
     if not roles_to_remove:
-        log(guild, msg := f"No obsolete rank roles to remove for {member.display_name}.")
+        log(guild, msg := f"No obsolete rank roles to remove.")
         return {"success": True, "value": msg}
 
     try:
@@ -452,11 +452,11 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         return {"success": True, "value": msg}
 
     except discord.Forbidden:
-        log(guild, msg := f"Missing permissions to remove roles from {member.display_name}")
+        log(guild, msg := f"Missing permissions to remove roles")
         return {"success": False, "value": msg}
 
     except discord.HTTPException as e:
-        log(guild, msg := f"Failed to remove roles from {member.display_name}: {e}")
+        log(guild, msg := f"Failed to remove roles: {e}")
         return {"success": False, "value": msg}
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None) -> dict:

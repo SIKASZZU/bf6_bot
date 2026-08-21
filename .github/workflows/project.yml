@@ -22,6 +22,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Compile project (Syntax check and bytecode build)
+        run: python -m compileall main.py
+
+      - name: Import project (Executes actual code and does the flow)
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_TOKEN_DEV: ${{ secrets.DISCORD_TOKEN_DEV }}
+        run: python -c "import main"
+
       - name: Run unit tests
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}

@@ -119,7 +119,7 @@ async def setup_roles(interaction: discord.Interaction):
 
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='set-channel', description='Bot will default to talking in this channel.')
+@bot.tree.command(name='set-channel', description='Bot will be set to talk in that channel.')
 @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
     config = load_config()
@@ -321,7 +321,7 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     )
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='assign-management-role', description="(Administrator*) Allow a role to use bot's commands. (max 1 role)")
+@bot.tree.command(name='set-authorised-role', description="(Administrator*) Allow a role to use bot's commands. (max 1 role)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
     role='Role that should be allowed to use bot commands.'
@@ -340,7 +340,7 @@ async def assign_management_role(interaction: discord.Interaction, role: discord
     )
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='display-management-role', description="Display management role.")
+@bot.tree.command(name='show-authorised-role', description="Display management role.")
 @helper.is_admin_or_has_role()
 async def display_management_role(interaction: discord.Interaction):
 
