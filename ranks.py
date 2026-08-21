@@ -51,12 +51,8 @@ async def create_roles(guild: discord.Guild):
             )
             created.append(rank_name)
 
-        except discord.Forbidden:
-            log(guild, f"Missing permissions to create role: {rank_name}")
-            failed.append(rank_name)
-
-        except discord.HTTPException as e:
-            log(guild, f"Failed to create role {rank_name}: {e}")
+        except Exception as e:
+            log(guild, fail_msg := f'Failed to create role. Error {e}')
             failed.append(rank_name)
 
     return created, skipped, failed
