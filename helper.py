@@ -66,7 +66,7 @@ def _build_commands_message():
         command_fields.append(field_value)
 
     if command_fields:
-        embed.add_field(name="Admin commands", value="\n".join(command_fields), inline=False)
+        embed.add_field(name="", value="\n".join(command_fields), inline=False)
 
     return embed
 
@@ -548,7 +548,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     if not channel:
         await notify_missing_channel_setup(guild)
         log(guild, fail_msg := f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
-        return {'success': True, 'value': fail_msg}
+        return {'success': False, 'value': fail_msg}
 
     log(guild, f"[START AUTOMATIC UPDATE]")
 

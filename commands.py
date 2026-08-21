@@ -344,7 +344,6 @@ async def assign_management_role(interaction: discord.Interaction, role: discord
 @helper.is_admin_or_has_role()
 async def display_management_role(interaction: discord.Interaction):
 
-
     message = discord.Embed(
         title="🔑 Management Role",
         color=discord.Color.blue()
@@ -353,7 +352,7 @@ async def display_management_role(interaction: discord.Interaction):
     if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
         role = interaction.guild.get_role(role_id)
         if role:
-            message.description = f"{role.mention} (and server Administrators) can use the bot's commands."
+            message.description = f"{role.mention} can use the bot's commands."
         else:
             message.description = f"⚠️ The configured role (ID `{role_id}`) no longer exists on this server. Run `/assign-management-role` to set a new one."
             message.color = discord.Color.orange()
