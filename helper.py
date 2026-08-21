@@ -38,6 +38,40 @@ def _get_tree_commands():
             return []
     return list(getattr(bot.tree, 'commands', []))
 
+def check_guild_requirements(guild: discord.Guild) -> dict:
+    """Checks everything the bot needs to run an update in this guild.
+
+    Returns {"ok": bool, "issues": [str, ...]} - issues is empty when ok is True.
+    Call this before _run_guild_update so a whole run fails fast with a clear
+    reason instead of dying partway through with a raw Discord exception.
+    """
+    issues = []
+
+    # 1. Base permission - can the bot manage roles here at all?
+    if not guild.me.guild_permissions.manage_roles:
+        issues.append("Bot is missing the 'Manage Roles' permission in this server.")
+
+    # 2. Hierarchy - bot's top role must sit above every rank role it assigns/removes.
+    #    Checked per-role rather than just "highest rank role" so you get the exact
+    #    offending role name instead of a vague pass/fail.
+    bot_top_position = guild.me.top_role.position
+    for rank_name in get_role_dict().keys():
+        role = discord.utils.get(guild.roles, name=rank_name)
+        if role is None:
+            issues.append(f"Rank role '{rank_name}' doesn't exist in this server yet (run role setup).")
+            continue
+        if role.position >= bot_top_position:
+            issues.append(f"Bot's role is positioned below '{rank_name}' - move the bot's role higher.")
+
+    # 3. Report channel - configured and still resolvable (not deleted).
+    channel_id = load_config().get(str(guild.id), {}).get('channel_id')
+    if not channel_id:
+        issues.append("No report channel configured - run /set-channel.")
+    elif not bot.get_channel(channel_id):
+        issues.append(f"Configured report channel ({channel_id}) no longer exists or bot can't see it.")
+
+    return {"ok": not issues, "issues": issues}
+
 def _build_commands_message():
     embed = discord.Embed(
         title="📋 All commands",
@@ -469,7 +503,6 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         log(guild, return_msg := f"Assign role error: {e}")
         return {"success": False, "value": return_msg}
 
-
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession, channel: discord.TextChannel):
     """
     Updates a single member's Discord rank roles based on their linked external game stats.
@@ -527,10 +560,10 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     on_progress, if given, is an async callable(updated_count, total_linked) invoked after
     each successful member update - used for live progress reporting (e.g. editing a message).
     """
-
-    channel = bot.get_channel(load_config().get(str(guild.id)).get('channel_id'))
-    if not channel:
-        log(guild, fail_msg := f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
+    check = check_guild_requirements(guild)
+    if not check["ok"]:
+        fail_msg = "[ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
+        log(guild, fail_msg)
         return {'success': False, 'value': fail_msg}
 
     log(guild, f"[START AUTOMATIC UPDATE]")
@@ -538,7 +571,6 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     failed_to_update: list = []
     success_to_update: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
-
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
@@ -588,7 +620,19 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             _loop.cancel()
             return
 
-        await _run_guild_update(guild)
+        return_value = await _run_guild_update(guild)
+
+        channel = bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))
+        if not channel:
+            log(guild, 'Channel is not set.')
+            return
+        try:
+            if return_value['success']:
+                await channel.send(f"✅ Automatic update complete. {return_value['value']}")
+            else:
+                await channel.send(f"⚠️ Automatic update finished with errors: {return_value['value']}")
+        except Exception as e:
+            log(guild, f'Error at automatic loop: {e}')
 
     return _loop
 

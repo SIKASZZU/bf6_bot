@@ -247,6 +247,13 @@ async def display_info(interaction: discord.Interaction):
 
     await helper.send_interaction_message(interaction, content=message)
 
+    check = helper.check_guild_requirements(interaction.guild)
+    if not check["ok"]:
+        fail_msg = "[ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
+        log(interaction.guild, fail_msg)
+        return {'success': False, 'value': fail_msg}
+
+
 @bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
 @helper.is_admin_or_has_role()
 async def display_setup(interaction: discord.Interaction):
