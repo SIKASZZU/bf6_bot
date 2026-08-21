@@ -134,6 +134,22 @@ def _get_time_to_next_update(guild: discord.Guild):
         print(f"Error calculating next update time: {e}")
         return "❌ Needs /set-channel"
 
+async def _warn_user_if_no_channel(interaction: discord.Interaction):
+    """DMs the invoking user
+    if this guild has no report channel configured yet. Called from send_interaction_message
+    so it fires after every slash command without needing to touch each command."""
+    if not interaction.guild:
+        return
+
+    if load_config().get(str(interaction.guild.id), {}).get('channel_id'):
+        return
+
+    try:
+        # await interaction.user.send(embed=_build_no_channel_warning_embed())
+        await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
+    except (discord.HTTPException, discord.Forbidden) as e:
+        log(interaction.guild, f"[WARNING] Failed to DM {interaction.user.display_name} about missing channel config: {e}")
+
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
     if isinstance(content, discord.Embed):
@@ -144,6 +160,8 @@ async def send_interaction_message(interaction: discord.Interaction, content: st
         await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
     else:
         await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
+
+    await _warn_user_if_no_channel(interaction)
 
 def get_player_entry(data: dict, guild_id: int, discord_id: int):
     """
@@ -231,13 +249,6 @@ async def notify_missing_channel_setup(guild: discord.Guild):
         await guild.owner.send(embed=embed)
     except (discord.HTTPException, discord.Forbidden, AttributeError) as e:
         log(guild, f"[WARNING] Failed to DM owner about missing channel config: {e}")
-
-@bot.after_invoke
-async def _check_and_send_warn_no_channel(ctx):
-    """Sends a warning message when no report channel is configured."""
-
-    if not load_config().get(str(ctx.guild.id)).get('channel_id'):
-        await ctx.send(embed=_build_no_channel_warning_embed())
 
 @bot.event
 async def on_ready():
