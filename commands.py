@@ -33,9 +33,11 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     helper.save_data(data)
 
     if target.id == interaction.user.id:
-        await helper.send_interaction_message(interaction, f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, msg := f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
     else:
-        await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, msg := f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
+
+    log(interaction.guild, msg)
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @helper.is_admin_or_has_role()
@@ -54,7 +56,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         # update only the requested target by checking if member was given.
         if member:
             async with aiohttp.ClientSession() as session:
-                return_value: dict = await helper._update_member(interaction.guild, target, session, channel=interaction.channel)
+                return_value: dict = await helper._update_member(interaction.guild, target, session)
 
                 if return_value['success']:
 
@@ -244,6 +246,13 @@ async def display_info(interaction: discord.Interaction):
     message.set_footer(text="For detailed instructions, use !setup or !instructions")
 
     await helper.send_interaction_message(interaction, content=message)
+
+    check = helper.check_guild_requirements(interaction.guild)
+    if not check["ok"]:
+        fail_msg = "[ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
+        log(interaction.guild, fail_msg)
+        return {'success': False, 'value': fail_msg}
+
 
 @bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
 @helper.is_admin_or_has_role()
