@@ -134,6 +134,19 @@ def _get_time_to_next_update(guild: discord.Guild):
         print(f"Error calculating next update time: {e}")
         return "❌ Needs /set-channel"
 
+def _build_no_channel_warning_embed() -> discord.Embed:
+    warning_embed = discord.Embed(
+        title="⚠️ Report Channel Not Configured",
+        description="No report channel has been set for this server!",
+        color=discord.Color.red()
+    )
+    warning_embed.add_field(
+        name="How to fix:",
+        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
+        inline=False
+    )
+    return warning_embed
+
 async def _warn_user_if_no_channel(interaction: discord.Interaction):
     """DMs the invoking user
     if this guild has no report channel configured yet. Called from send_interaction_message
@@ -200,7 +213,6 @@ def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
             return discord.utils.get(interaction.user.roles, id=role_id) is not None
 
     return app_commands.check(predicate)
-
 async def global_rate_limit(interaction: discord.Interaction):
     global _last_command_time
     now = time.monotonic() # lol wtf
