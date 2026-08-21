@@ -628,9 +628,9 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             return
         try:
             if return_value['success']:
-                await channel.send(f"✅ Automatic update complete. {return_value['value']}")
+                log(f"✅ Automatic update complete. {return_value['value']}")
             else:
-                await channel.send(f"⚠️ Automatic update finished with errors: {return_value['value']}")
+                log(f"⚠️ Automatic update finished with errors: {return_value['value']}")
         except Exception as e:
             log(guild, f'Error at automatic loop: {e}')
 
