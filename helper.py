@@ -200,6 +200,7 @@ def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
             return discord.utils.get(interaction.user.roles, id=role_id) is not None
 
     return app_commands.check(predicate)
+
 async def global_rate_limit(interaction: discord.Interaction):
     global _last_command_time
     now = time.monotonic() # lol wtf
@@ -212,43 +213,6 @@ async def global_rate_limit(interaction: discord.Interaction):
     return True
 
 bot.tree.interaction_check = global_rate_limit
-
-def _build_no_channel_warning_embed() -> discord.Embed:
-    warning_embed = discord.Embed(
-        title="⚠️ Report Channel Not Configured",
-        description="No report channel has been set for this server!",
-        color=discord.Color.red()
-    )
-    warning_embed.add_field(
-        name="How to fix:",
-        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
-        inline=False
-    )
-    return warning_embed
-
-async def notify_missing_channel_setup(guild: discord.Guild):
-    """Best-effort notification that no report channel is configured yet.
-    Tries the system channel first, then any postable text channel, then DMs the owner."""
-    embed = _build_no_channel_warning_embed()
-
-    target = guild.system_channel
-    if target:
-        try:
-            await target.send(embed=embed)
-            return
-        except discord.HTTPException as e:
-            log(guild, f"[WARNING] Failed to send no-channel warning to #{target.name}: {e}")
-
-    if not target or not target.permissions_for(guild.me).send_messages:
-        target = discord.utils.find(
-            lambda c: c.permissions_for(guild.me).send_messages,
-            guild.text_channels
-        )
-
-    try:
-        await guild.owner.send(embed=embed)
-    except (discord.HTTPException, discord.Forbidden, AttributeError) as e:
-        log(guild, f"[WARNING] Failed to DM owner about missing channel config: {e}")
 
 @bot.event
 async def on_ready():
@@ -557,7 +521,6 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
 
     channel = bot.get_channel(load_config().get(str(guild.id)).get('channel_id'))
     if not channel:
-        await notify_missing_channel_setup(guild)
         log(guild, fail_msg := f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
         return {'success': False, 'value': fail_msg}
 
