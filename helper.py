@@ -2,6 +2,7 @@ import json
 import aiohttp
 import time
 from discord.ext import commands, tasks
+from discord import app_commands
 import asyncio
 import datetime
 
@@ -16,7 +17,6 @@ def load_data() -> dict:
 
 def save_data(data: dict):
     if not isinstance(data, dict):
-        # TODO: figure out how to remove print?
         print('Returning! No data provided for save_data.')
         return
 
@@ -66,11 +66,11 @@ def _build_commands_message():
         command_fields.append(field_value)
 
     if command_fields:
-        embed.add_field(name="Admin commands", value="\n".join(command_fields), inline=False)
+        embed.add_field(name="", value="\n".join(command_fields), inline=False)
 
     return embed
 
-def _build_links_message(guild: discord.Guild, data: dict) -> discord.Embed:
+def _build_linked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
     embed = discord.Embed(
@@ -114,6 +114,7 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
         embed.description = "\n".join(lines)
     return embed
 
+# TODO: siin on bug, kui on interval 1 h siis failib displaymast
 def _get_time_to_next_update(guild: discord.Guild):
     try:
         loop = running_loops.get(guild.id)
@@ -131,7 +132,36 @@ def _get_time_to_next_update(guild: discord.Guild):
 
     except Exception as e:
         print(f"Error calculating next update time: {e}")
-    return "❌ Needs /set-channel"
+        return "❌ Needs /set-channel"
+
+def _build_no_channel_warning_embed() -> discord.Embed:
+    warning_embed = discord.Embed(
+        title="⚠️ Report Channel Not Configured",
+        description="No report channel has been set for this server!",
+        color=discord.Color.red()
+    )
+    warning_embed.add_field(
+        name="How to fix:",
+        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
+        inline=False
+    )
+    return warning_embed
+
+async def _warn_user_if_no_channel(interaction: discord.Interaction):
+    """DMs the invoking user
+    if this guild has no report channel configured yet. Called from send_interaction_message
+    so it fires after every slash command without needing to touch each command."""
+    if not interaction.guild:
+        return
+
+    if load_config().get(str(interaction.guild.id), {}).get('channel_id'):
+        return
+
+    try:
+        # await interaction.user.send(embed=_build_no_channel_warning_embed())
+        await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
+    except (discord.HTTPException, discord.Forbidden) as e:
+        log(interaction.guild, f"[WARNING] Failed to DM {interaction.user.display_name} about missing channel config: {e}")
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
@@ -143,6 +173,8 @@ async def send_interaction_message(interaction: discord.Interaction, content: st
         await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
     else:
         await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
+
+    await _warn_user_if_no_channel(interaction)
 
 def get_player_entry(data: dict, guild_id: int, discord_id: int):
     """
@@ -160,17 +192,28 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
 _last_command_time = 0
 REQUEST_INTERVAL_SECONDS = 2
 
-def is_admin_or_has_role(role_name: str = PERMISSIONED_ROLE):
-    """Passes if the invoking user is a server administrator OR has the given role."""
-    def predicate(ctx: commands.Context) -> bool:
-        if ctx.author.guild_permissions.administrator:
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Catches errors from slash commands (on_command_error above only fires for prefix commands)."""
+
+    if isinstance(error, app_commands.CheckFailure):
+        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `{PERMISSIONED_ROLE}` role.", ephemeral=True)
+        return
+
+    log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
+    await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
+
+def is_admin_or_has_role():
+    """Passes if the invoking user is a server administrator OR has the management role."""
+    def predicate(interaction: discord.Interaction) -> bool:
+        if interaction.user.guild_permissions.administrator:
             return True
-        return discord.utils.get(ctx.author.roles, name=role_name) is not None
 
-    return commands.check(predicate)
+        if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
+            return discord.utils.get(interaction.user.roles, id=role_id) is not None
 
-@bot.check
-async def global_rate_limit(ctx):
+    return app_commands.check(predicate)
+async def global_rate_limit(interaction: discord.Interaction):
     global _last_command_time
     now = time.monotonic() # lol wtf
 
@@ -181,53 +224,10 @@ async def global_rate_limit(ctx):
     _last_command_time = now
     return True
 
-def _build_no_channel_warning_embed() -> discord.Embed:
-    warning_embed = discord.Embed(
-        title="⚠️ Report Channel Not Configured",
-        description="No report channel has been set for this server!",
-        color=discord.Color.red()
-    )
-    warning_embed.add_field(
-        name="How to fix:",
-        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
-        inline=False
-    )
-    return warning_embed
-
-async def notify_missing_channel_setup(guild: discord.Guild):
-    """Best-effort notification that no report channel is configured yet.
-    Tries the system channel first, then any postable text channel, then DMs the owner."""
-    embed = _build_no_channel_warning_embed()
-
-    target = guild.system_channel
-    if target:
-        try:
-            await target.send(embed=embed)
-            return
-        except discord.HTTPException as e:
-            log(guild, f"[WARNING] Failed to send no-channel warning to #{target.name}: {e}")
-
-    if not target or not target.permissions_for(guild.me).send_messages:
-        target = discord.utils.find(
-            lambda c: c.permissions_for(guild.me).send_messages,
-            guild.text_channels
-        )
-
-    try:
-        await guild.owner.send(embed=embed)
-    except (discord.HTTPException, discord.Forbidden, AttributeError) as e:
-        log(guild, f"[WARNING] Failed to DM owner about missing channel config: {e}")
-
-@bot.after_invoke
-async def _check_and_send_warn_no_channel(ctx):
-    """Sends a warning message when no report channel is configured."""
-
-    if not load_config().get(str(ctx.guild.id)).get('channel_id'):
-        await ctx.send(embed=_build_no_channel_warning_embed())
+bot.tree.interaction_check = global_rate_limit
 
 @bot.event
 async def on_ready():
-    #TODO: fix print here maybbe
     print(f"Logged in as {bot.user.name}!")
 
     for guild in bot.guilds:
@@ -414,103 +414,121 @@ async def get_role(guild: discord.Guild, rank_name: str, channel: discord.TextCh
 
     if role is None:
         log(guild, 'Missing role!')
-        if channel:
-            await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
+        # if channel:
+        #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
     return role
 
-async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name:str, channel: discord.TextChannel = None):
-    current_role_names = {role.name for role in member.roles}
-    for role_name in get_role_dict().keys():
-        if role_name not in current_role_names:
-            continue
-        if role_name == current_rank_name:
-            continue
+async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str, channel: discord.TextChannel = None) -> dict:
+    """Removes all obsolete rank roles from a member, keeping only their current rank role."""
+    all_rank_names = get_role_dict().keys()
 
-        role_cls = await get_role(guild, role_name)
-        if isinstance(role_cls, str):
-            role_cls = discord.utils.get(guild.roles, name=role_cls)
+    # Identify obsolete roles the member currently holds
+    roles_to_remove = [
+        role for role in member.roles
+        if role.name in all_rank_names and role.name != current_rank_name
+    ]
 
-        if role_cls is None or (not hasattr(role_cls, "name") and not isinstance(role_cls, str)):
-            log(guild, f'Returning! role_cls is not a valid role object: {role_cls!r}')
-            continue
+    if not roles_to_remove:
+        log(guild, msg := f"No obsolete rank roles to remove.")
+        return {"success": True, "value": msg}
 
-        log(guild, f'Removing {role_name} from {member.display_name}, extra: {type(role_cls)}')
+    try:
+        await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
+        removed_names = ", ".join(role.name for role in roles_to_remove)
+        log(guild, msg := f"Removed roles: {removed_names}.")
+        return {"success": True, "value": msg}
 
-        await member.remove_roles(role_cls, reason='Rank sync - removing role')
+    except discord.Forbidden:
+        log(guild, msg := f"Missing permissions to remove roles")
+        return {"success": False, "value": msg}
 
-        if channel:
-            await channel.send(f"✅ Removed `{role_name}` from `{member.display_name}`")
+    except discord.HTTPException as e:
+        log(guild, msg := f"Failed to remove roles: {e}")
+        return {"success": False, "value": msg}
 
-async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None):
+async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str, channel: discord.TextChannel = None) -> dict:
     """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
     if not rank_name:
-        log(guild, 'Returning! rank_name is None.')
-        return
+        log(guild, return_msg := 'Returning! rank_name is None.')
+        return {"success": False, "value": return_msg}
 
-    role = await get_role(guild, rank_name, channel)
-    if role is None:
-        log(guild, 'Returning! Role is None.')
-        return
+    if not (role := await get_role(guild, rank_name, channel)):
+        log(guild, return_msg := 'Returning! Role is None.')
+        return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, f"Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
-        if channel:
-            await channel.send(f"❌ Bot's top role is too low to assign '{rank_name}' - move the bot's role higher.")
-        return
+        log(guild, return_msg := f"Bot's role is too low to assign '{rank_name}' - move the bot's role higher.")
+        return {"success": False, "value": return_msg}
 
     try:
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, f"Assigned {rank_name} to {member.display_name}")
-            if channel:
-                await channel.send(f"✅ Assigned `{rank_name}` to `{member.display_name}`")
-            return
+            log(guild, return_msg := f"Assigned rank: {rank_name}.")
+        else:
+            log(guild, return_msg := f"Already has rank: {rank_name}.")
+
+        return {"success": True, "value": return_msg}
 
     except discord.Forbidden:
-        log(guild, f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
+        log(guild, return_msg := f"Missing permissions to assign role '{rank_name}' to {member.display_name}")
+        return {"success": False, "value": return_msg}
 
     except discord.HTTPException as e:
-        log(guild, f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+        log(guild, return_msg := f"Failed to assign role '{rank_name}' to {member.display_name}: {e}")
+        return {"success": False, "value": return_msg}
+
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession, channel: discord.TextChannel):
-    """Update a single member's rank. """
+    """
+    Updates a single member's Discord rank roles based on their linked external game stats.
+
+    Steps:
+    1. Validates member eligibility (skips bots and unlinked accounts).
+    2. Fetches external player stats and resolves their career rank name.
+    3. Assigns the new rank role and strips obsolete rank roles in the guild.
+
+    Returns:
+        dict: A status map containing {'success': bool} along with 'value' (details),
+              plus role update results on success.
+    """
     await bot.wait_until_ready()
 
-    if member.bot:
-        log(guild, f"❌ Trying to update a bot. What the helly.")
-        return False
+    return_msg = {'success': True}
 
-    entry = get_player_entry(load_data(), guild.id, member.id)
-    if not entry:
-        log(guild, f"❌ discord: {member.display_name}. Not linked. Skipping.")
-        return False
+    if member.bot:
+        log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
+        return return_msg | {'success': False, 'value': fail_msg}
+
+    if not (entry := get_player_entry(load_data(), guild.id, member.id)):
+        log(guild, fail_msg := f"❌ discord: {member.display_name}. Not linked. Skipping.")
+        return return_msg | {'success': False, 'value': fail_msg}
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    stats = await fetch_player_stats(guild, session, name, platform)
-
-    if stats is None:
-        log(guild, f"❌ Data fetch failed for discord: {member.display_name}, link: {name}, {platform}. {API_MAX_RETRIES}x attempts.")
-        return False
+    if not (stats := await fetch_player_stats(guild, session, name, platform)):
+        log(guild, fail_msg := f"⚠️ Data fetch failed for discord: `{member.display_name}`. If link for member is correct, do not stress. API failure.")
+        return return_msg | {'success': False, 'value': fail_msg}
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        log(guild, f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
-        if channel:
-            await channel.send(f"⚠️ Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
-        return False
+        log(guild, fail_msg := f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
+        return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
+    log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
-    log(guild, f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+    return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name, channel)
+    if not return_msg['assign_rank_role']['success']:
+        return return_msg | {'success': False, 'value': return_msg['assign_rank_role']['value'] }
 
-    await assign_rank_role(guild, member, concise_rank_name, channel)
-    await remove_rank_role(guild, member, concise_rank_name, channel)
+    return_msg['remove_rank_role'] = await remove_rank_role(guild, member, concise_rank_name, channel)
+    if not return_msg['remove_rank_role']['success']:
+        return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
 
-    return True
+    return return_msg | {'value': success_msg}
 
-async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
+async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
 
@@ -520,38 +538,54 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> int:
 
     channel = bot.get_channel(load_config().get(str(guild.id)).get('channel_id'))
     if not channel:
-        log(guild, f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
-        await notify_missing_channel_setup(guild)
-        return
+        log(guild, fail_msg := f"[ERROR STARTING AUTOMATIC UPDATE]: channel is None")
+        return {'success': False, 'value': fail_msg}
 
     log(guild, f"[START AUTOMATIC UPDATE]")
 
-    updated_count = 0
     failed_to_update: list = []
+    success_to_update: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
+
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
 
             try:
-                updated: bool = await _update_member(guild, member, session, channel)
+                return_value: dict = await _update_member(guild, member, session, channel)
+                updated: bool = return_value['success']
 
                 if on_progress:
-                    await on_progress(updated_count, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
+                    await on_progress(len(success_to_update), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not updated:
-                    raise Exception('_update_member failed to update.')
+                    raise Exception(return_value['value'])
 
-                updated_count += 1
+                success_to_update.append(member.display_name)
 
             except Exception as e:
                 failed_to_update.append(member.display_name)
-                log(guild, f"❌ [ERROR] Update failed for discord: {member.display_name}, skipping: {e}")
+                log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, skipping: {e}")
 
-    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {updated_count} member{'' if updated_count == 1 else 's'}.")
-    return failed_to_update
+    log(guild,
+        f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}.\
+        Failed with {len(failed_to_update)}member{'' if len(failed_to_update) == 1 else 's'}"
+    )
+
+    if failed_to_update:
+        return {'success': False, 'value': ', '.join(failed_to_update)}
+
+    return {'success': True, 'value': ', '.join(success_to_update)}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
+    if not interval_hours:
+        log(bot.get_guild(guild_id), f'{interval_hours} is not valid. Returning.')
+        return
+
+    if not guild_id:
+        log(bot.get_guild(guild_id), f'{guild_id} is not valid. Returning.')
+        return
+
     @tasks.loop(hours=interval_hours)
     async def _loop():
         await bot.wait_until_ready()
@@ -568,10 +602,6 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
 def start_guild_update_loop(guild: discord.Guild):
     """Starts (or restarts) the automatic update loop for one guild, using its configured interval."""
-    existing = running_loops.get(guild.id)
-    if existing and existing.is_running():
-        return
-
     loop = _make_guild_update_loop(guild.id, load_config().get(str(guild.id)).get('update_interval'))
     running_loops[guild.id] = loop
     loop.start()

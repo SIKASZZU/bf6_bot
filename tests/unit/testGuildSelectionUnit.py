@@ -70,7 +70,7 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             patch("helper.load_data", return_value={"222": {"1": {}, "2": {}}}), \
             patch("helper.bot.get_channel", return_value=FakeChannel(999)), \
             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
+            patch("helper._update_member", new=AsyncMock(return_value={"success": True})) as update_member:
             await helper._run_guild_update(guild_b)
 
         self.assertEqual(update_member.await_count, 2)
@@ -84,7 +84,7 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             patch("helper.load_data", return_value={"111": {"1": {}}}), \
             patch("helper.bot.get_channel", return_value=fake_channel) as get_channel, \
             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(return_value=True)) as update_member:
+            patch("helper._update_member", new=AsyncMock(return_value={"success": True})) as update_member:
             await helper._run_guild_update(guild)
 
         get_channel.assert_called_once_with(999)
@@ -97,11 +97,11 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
             patch("helper.bot.get_channel", return_value=FakeChannel(999)), \
             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(side_effect=[Exception("boom"), True])) as update_member:
-            failed_to_update: list = await helper._run_guild_update(guild)
+            patch("helper._update_member", new=AsyncMock(side_effect=[Exception("boom"), {"success": True}])) as update_member:
+            update_result: dict = await helper._run_guild_update(guild)
 
         self.assertEqual(update_member.await_count, 2)
-        self.assertEqual(len(failed_to_update), 1)
+        self.assertEqual(update_result, {"success": False, "value": "Alice"})
 
     # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
     #     guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])

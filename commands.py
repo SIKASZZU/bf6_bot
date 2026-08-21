@@ -17,16 +17,16 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 
     await interaction.response.defer()
 
-    if member.bot:
+    target = member or interaction.user
+
+    if target.bot:
         await helper.send_interaction_message(interaction, f"❌ Dude. Why assign to bot someone's account? I hereby refuse.")
         return
 
     platform = DEFAULT_PLATFORM
-    if platform not in VALID_PLATFORMS:
-        await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
-        return
-
-    target = member or interaction.user
+    # if platform not in VALID_PLATFORMS:
+    #     await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
+    #     return
 
     data = helper.load_data()
     data.setdefault(str(interaction.guild.id))[str(target.id)] = {"name": name, "platform": platform}
@@ -37,33 +37,40 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     else:
         await helper.send_interaction_message(interaction, f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
 
-
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
 @helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member',
-    update_everybody='Update all members that have been linked.'
 )
-async def force_update(interaction: discord.Interaction, member: discord.Member = None, update_everybody: bool = False):
+async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
-    member_name = member.display_name if member else "None"
-
     await helper.send_interaction_message(interaction, f'🔄 Updating...')
-    log(interaction.guild, f'(Updating... arguments: member: `{member_name}`, update_everybody: `{update_everybody}`)')
+    log(interaction.guild, f'(Updating... arguments: member: `{member.display_name if member else 'None'}`')
 
     target = member or interaction.user
 
     try:
-        if not update_everybody:
+        # update only the requested target by checking if member was given.
+        if member:
             async with aiohttp.ClientSession() as session:
-                if await helper._update_member(interaction.guild, target, session, channel=interaction.channel):
-                    log(interaction.guild, f"✅ Player stats update completed successfully for {target.display_name}!")
-                    await interaction.edit_original_response(content=f"✅ Player update completed successfully for `{target.display_name}`!")
+                return_value: dict = await helper._update_member(interaction.guild, target, session, channel=interaction.channel)
+
+                if return_value['success']:
+
+                    await interaction.edit_original_response(
+                        content = ', '.join([
+                            return_value['value'],
+                            return_value['assign_rank_role']['value'],
+                            return_value['remove_rank_role']['value']
+                        ])
+                    )
+
                 else:
-                    raise Exception(f'Failed to update for discord: `{target.display_name}`')
+                    raise Exception(f'Update fail for `{target.display_name}`. {return_value['value']}')
             return
 
+        # update everybody
         last_edit = 0.0
         async def report_progress(done: int, total: int, is_last: bool):
             nonlocal last_edit
@@ -73,25 +80,24 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             last_edit = now
             await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
 
-        failed_to_update: list = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
 
-        if failed_to_update:
-            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {", ".join(failed_to_update)}.")
+        if not (return_value := await helper._run_guild_update(interaction.guild, on_progress=report_progress))['success']:
+            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {return_value['value']}.")
             return
 
-        await interaction.edit_original_response(content=f"✅ Update successful.")
+        await interaction.edit_original_response(content=f"✅ Update successful. {return_value['value']}")
 
     except Exception as e:
-        log(interaction.guild, f"Manual update error: {e}")
-        await interaction.edit_original_response(content=f"❌ An error occurred during the update: {e}")
+        log(interaction.guild, fail_msg := f'❌ {e}')
+        await interaction.edit_original_response(content=fail_msg)
 
-@bot.tree.command(name='setup-roles', description='Creates all possible career rank roles for bot to assign.')
+@bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 @helper.is_admin_or_has_role()
 async def setup_roles(interaction: discord.Interaction):
     created, skipped, failed = await create_roles(interaction.guild)
 
     message = discord.Embed(
-        title="⚙️ Role Setup",
+        title="⚙️ Role Creation",
         color=discord.Color.green()
     )
 
@@ -106,14 +112,14 @@ async def setup_roles(interaction: discord.Interaction):
         if failed:
             message.add_field(
                 name="❌ Missing permissions",
-                value=", ".join(failed) + "\n_Move the bot's role above these ranks (or grant Manage Roles), then run `/setup-roles` again._",
+                value=", ".join(failed) + f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._",
                 inline=False
             )
             message.color = discord.Color.orange()
 
     await helper.send_interaction_message(interaction, content=message)
 
-@bot.tree.command(name='set-channel', description='Bot will default to talking to this the set channel.')
+@bot.tree.command(name='set-channel', description='Bot will be set to talk in that channel.')
 @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
     config = load_config()
@@ -161,12 +167,12 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
 async def display_commands(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_commands_message())
 
-@bot.tree.command(name='links', description=f'Have all the links be displayed.')
+@bot.tree.command(name='linked', description=f'Have all the links be displayed.')
 @helper.is_admin_or_has_role()
 async def display_links(interaction: discord.Interaction):
-    await helper.send_interaction_message(interaction, content=helper._build_links_message(interaction.guild, helper.load_data()))
+    await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data()))
 
-@bot.tree.command(name='unlinks', description=f'Have all the unlinked members be displayed.')
+@bot.tree.command(name='unlinked', description=f'Have all the unlinked members be displayed.')
 @helper.is_admin_or_has_role()
 async def display_unlinks(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_unlinked_message(interaction.guild, helper.load_data()))
@@ -202,10 +208,13 @@ async def display_info(interaction: discord.Interaction):
     )
 
     # Setup Status
-    channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured. Use /set-channel so bot reports information there."
+    channel_status = f"<#{channel_id}>" if channel_id else "❌ Not configured. Use /set-channel."
+    role_id = guild_config.get('permissioned_role_id')
+    authorised_role_display = f"<@&{role_id}>" if role_id else "Administrator only"
+
     message.add_field(
         name="⚙️ Configuration",
-        value=f"Report channel: {channel_status}",
+        value=f"Report channel: {channel_status}\nAuthorised role: {authorised_role_display}",
         inline=False
     )
 
@@ -248,7 +257,7 @@ async def display_setup(interaction: discord.Interaction):
 
     message.add_field(
         name="Step 1️⃣: Create Rank Roles",
-        value=f"Administrator runs: `{COMMAND_PREFIX}setup-roles`\nThis creates roles for each BF6 rank.",
+        value=f"Administrator runs: `{COMMAND_PREFIX}create-roles`\nThis creates roles for each BF6 rank.",
         inline=False
     )
 
@@ -313,6 +322,46 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
         description=f"Unlinked {member.mention} from account `{account_name}`",
         color=discord.Color.green()
     )
+    await helper.send_interaction_message(interaction, content=message)
+
+@bot.tree.command(name='set-authorised-role', description="(Administrator*) Allow a role to use bot's commands. (max 1 role)")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    role='Role that should be allowed to use bot commands.'
+    )
+async def assign_management_role(interaction: discord.Interaction, role: discord.Role):
+    config = load_config()
+    config.setdefault(str(interaction.guild.id))['permissioned_role_id'] = role.id
+    save_config(config)
+
+    log(interaction.guild, f"Management role set to '{role.name}' ({role.id}) by {interaction.user.display_name}")
+
+    message = discord.Embed(
+        title="✅ Management Role Set",
+        description=f"{role.mention} can now use the bot's commands (in addition to server Administrators).",
+        color=discord.Color.green()
+    )
+    await helper.send_interaction_message(interaction, content=message)
+
+@bot.tree.command(name='show-authorised-role', description="Display management role.")
+@helper.is_admin_or_has_role()
+async def display_management_role(interaction: discord.Interaction):
+
+    message = discord.Embed(
+        title="🔑 Management Role",
+        color=discord.Color.blue()
+    )
+
+    if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
+        role = interaction.guild.get_role(role_id)
+        if role:
+            message.description = f"{role.mention} can use the bot's commands."
+        else:
+            message.description = f"⚠️ The configured role (ID `{role_id}`) no longer exists on this server. Run `/assign-management-role` to set a new one."
+            message.color = discord.Color.orange()
+    else:
+        message.description = f"No management role has been set yet. Run `/assign-management-role` to set one explicitly."
+
     await helper.send_interaction_message(interaction, content=message)
 
 # @bot.tree.command(name='time-until-update', description='Shows the time until the next automatic update.')

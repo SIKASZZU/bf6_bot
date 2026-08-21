@@ -32,7 +32,7 @@ class TestRoleRemoval(unittest.IsolatedAsyncioTestCase):
         with patch("helper.get_role", new=AsyncMock(return_value=old_role)):
             await remove_rank_role(guild, member, "Major")
 
-        self.assertEqual(member.removed, [("Kapral", "Rank sync - removing role")])
+        self.assertEqual(member.removed, [("Kapral", "Rank sync - removing obsolete roles")])
 
     async def test_remove_rank_role_resolves_string_role_names(self):
         current_role = FakeRole("Major")
@@ -43,7 +43,7 @@ class TestRoleRemoval(unittest.IsolatedAsyncioTestCase):
         with patch("helper.get_role", new=AsyncMock(return_value="Kapral")):
             await remove_rank_role(guild, member, "Major")
 
-        self.assertEqual(member.removed, [("Kapral", "Rank sync - removing role")])
+        self.assertEqual(member.removed, [("Kapral", "Rank sync - removing obsolete roles")])
 
 if __name__ == "__main__":
     unittest.main()
