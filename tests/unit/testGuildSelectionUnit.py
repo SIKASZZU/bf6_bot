@@ -91,6 +91,29 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertIs(update_member.await_args_list[0].args[0], guild)
         self.assertIs(update_member.await_args_list[0].args[1], guild.members[0])
 
+    async def test_run_guild_update_reports_role_changes_per_member(self):
+        guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
+        update_results = [
+            {
+                "success": True,
+                "assign_rank_role": {"rank_added": "Major"},
+                "remove_rank_role": {"rank_removed": "Kapral"},
+            },
+            {"success": True},
+        ]
+
+        with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
+            patch("helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("helper._update_member", new=AsyncMock(side_effect=update_results)):
+            update_result = await helper._run_guild_update(guild)
+
+        self.assertEqual(update_result, {
+            "success": True,
+            "value": "Alice -> rank_added: Major, rank_removed: Kapral, Bob",
+        })
+
     async def test_run_guild_update_continues_after_a_member_raises(self):
         guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
 

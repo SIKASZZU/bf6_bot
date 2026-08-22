@@ -148,7 +148,6 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
         embed.description = "\n".join(lines)
     return embed
 
-# TODO: siin on bug, kui on interval 1 h siis failib displaymast
 def _get_time_to_next_update(guild: discord.Guild):
     try:
         loop = running_loops.get(guild.id)
@@ -464,13 +463,13 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
     if not roles_to_remove:
         log(guild, msg := f"No obsolete rank roles to remove.")
-        return {"success": True, "value": msg}
+        return {"success": True, "value": msg, "rank_removed": []}
 
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
         removed_names = ", ".join(role.name for role in roles_to_remove)
         log(guild, msg := f"Removed roles: {removed_names}.")
-        return {"success": True, "value": msg}
+        return {"success": True, "value": msg, "rank_removed": removed_names}
 
     except Exception as e:
         log(guild, return_msg := f"Remove rank error: {e}")
@@ -494,10 +493,12 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
             log(guild, return_msg := f"Assigned rank: {rank_name}.")
+            rank_added = rank_name
         else:
             log(guild, return_msg := f"Already has rank: {rank_name}.")
+            rank_added = None
 
-        return {"success": True, "value": return_msg}
+        return {"success": True, "value": return_msg, "rank_added": rank_added}
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
@@ -585,7 +586,18 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                 if not updated:
                     raise Exception(return_value['value'])
 
-                success_to_update.append(member.display_name)
+                summary = member.display_name
+                rank_added = return_value.get('assign_rank_role', {}).get('rank_added')
+                rank_removed = return_value.get('remove_rank_role', {}).get('rank_removed')
+                changes = []
+
+                if rank_added:
+                    changes.append(f"rank_added: {rank_added}")
+                if rank_removed:
+                    changes.append(f"rank_removed: {rank_removed}")
+                if changes:
+                    summary += " -> " + ", ".join(changes)
+                success_to_update.append(summary)
 
             except Exception as e:
                 failed_to_update.append(member.display_name)
@@ -626,13 +638,16 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         if not channel:
             log(guild, 'Channel is not set.')
             return
+
         try:
+            channel_msg = f"⚠️ Automatic update finished with errors: {return_value['value']}"
             if return_value['success']:
-                log(f"✅ Automatic update complete. {return_value['value']}")
-            else:
-                log(f"⚠️ Automatic update finished with errors: {return_value['value']}")
+                channel_msg = f"✅ Automatic update complete. {return_value['value']}"
+            log(guild, channel_msg)
+            await channel.send(channel_msg)
+
         except Exception as e:
-            log(guild, f'Error at automatic loop: {e}')
+            log(guild, f'Error at automatic loop sending channel msg: {e}')
 
     return _loop
 
