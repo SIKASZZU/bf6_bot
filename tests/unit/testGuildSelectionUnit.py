@@ -108,10 +108,9 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
             patch("helper._update_member", new=AsyncMock(side_effect=update_results)):
             update_result = await helper._run_guild_update(guild)
-
         self.assertEqual(update_result, {
             "success": True,
-            "value": "Alice -> rank_added: Major, rank_removed: Kapral, Bob",
+            "value": '\n`Alice`: Assigned `Major`, \n`Bob`',
         })
 
     async def test_run_guild_update_continues_after_a_member_raises(self):

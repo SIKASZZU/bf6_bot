@@ -586,26 +586,22 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                 if not updated:
                     raise Exception(return_value['value'])
 
-                summary = member.display_name
-                rank_added = return_value.get('assign_rank_role', {}).get('rank_added')
-                rank_removed = return_value.get('remove_rank_role', {}).get('rank_removed')
                 changes = []
 
-                if rank_added:
-                    changes.append(f"rank_added: {rank_added}")
-                if rank_removed:
-                    changes.append(f"rank_removed: {rank_removed}")
+                if rank_assigned := return_value.get('assign_rank_role', {}).get('rank_added'):
+                    changes.append(f"Assigned `{rank_assigned}`")
+
+                summary = f'`{member.display_name}`'
                 if changes:
-                    summary += " -> " + ", ".join(changes)
-                success_to_update.append(summary)
+                    summary += ": " + ", ".join(changes)
+                success_to_update.append(f'\n{summary}')
 
             except Exception as e:
                 failed_to_update.append(member.display_name)
                 log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, error: {e}")
 
     log(guild,
-        f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}.\
-        Failed with {len(failed_to_update)}member{'' if len(failed_to_update) == 1 else 's'}"
+        f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}. Failed with {len(failed_to_update)}member{'' if len(failed_to_update) == 1 else 's'}"
     )
 
     if failed_to_update:
@@ -642,7 +638,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         try:
             channel_msg = f"⚠️ Automatic update finished with errors: {return_value['value']}"
             if return_value['success']:
-                channel_msg = f"✅ Automatic update complete. {return_value['value']}"
+                channel_msg = f"✅ Automatic update complete. Updated: {return_value['value']}"
             log(guild, channel_msg)
             await channel.send(channel_msg)
 
