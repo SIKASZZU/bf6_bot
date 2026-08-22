@@ -243,8 +243,6 @@ async def display_info(interaction: discord.Interaction):
         inline=False
     )
 
-    message.set_footer(text="For detailed instructions, use !setup or !instructions")
-
     await helper.send_interaction_message(interaction, content=message)
 
     check = helper.check_guild_requirements(interaction.guild)
