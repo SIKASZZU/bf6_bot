@@ -628,17 +628,21 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             _loop.cancel()
             return
 
+        if not (channel := bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))):
+            log(guild, 'Channel is not set.')
+            return _loop
+
         return_value = await _run_guild_update(guild)
 
-        channel = bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))
-        if not channel:
-            log(guild, 'Channel is not set.')
-            return
+        if not return_value['value']:
+            log(guild, 'No updated members.')
+            return _loop
 
         try:
             channel_msg = f"⚠️ Automatic update finished with errors: {return_value['value']}"
             if return_value['success']:
                 channel_msg = f"✅ Automatic update complete. {'Updated: ' if return_value['value'] else ''}{return_value['value']}"
+
             log(guild, channel_msg)
             await channel.send(channel_msg)
 
