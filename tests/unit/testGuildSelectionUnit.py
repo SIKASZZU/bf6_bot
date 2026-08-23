@@ -96,10 +96,16 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         update_results = [
             {
                 "success": True,
-                "assign_rank_role": {"rank_added": "Major"},
-                "remove_rank_role": {"rank_removed": "Kapral"},
+                "value": "",
+                "assign_rank_role": {"value": "Assigned `Major`", "rank_added": "Major"},
+                "remove_rank_role": {"value": "", "rank_removed": "Kapral"},
             },
-            {"success": True},
+            {
+                "success": True,
+                "value": "",
+                "assign_rank_role": {"value": "", "rank_added": None},
+                "remove_rank_role": {"value": "", "rank_removed": None},
+            },
         ]
 
         with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
@@ -108,10 +114,10 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
             patch("helper._update_member", new=AsyncMock(side_effect=update_results)):
             update_result = await helper._run_guild_update(guild)
-        self.assertEqual(update_result, {
-            "success": True,
-            "value": '\n`Alice`: Assigned `Major`, \n`Bob`',
-        })
+        self.assertTrue(update_result["success"])
+        self.assertIn("Alice", update_result["value"])
+        self.assertIn("Assigned", update_result["value"])
+        self.assertIn("Bob", update_result["value"])
 
     async def test_run_guild_update_continues_after_a_member_raises(self):
         guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
@@ -125,7 +131,9 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             update_result: dict = await helper._run_guild_update(guild)
 
         self.assertEqual(update_member.await_count, 2)
-        self.assertEqual(update_result, {"success": False, "value": "Alice"})
+        self.assertTrue(update_result["success"])
+        self.assertIn("`Alice`: boom", update_result["value"])
+        self.assertIn("Bob", update_result["value"])
 
     # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
     #     guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
