@@ -452,7 +452,15 @@ async def get_role(guild: discord.Guild, rank_name: str):
     return role
 
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
-    """Removes all obsolete rank roles from a member, keeping only their current rank role."""
+    """
+    Removes all obsolete rank roles from a member, keeping only their current rank role.
+
+    return_value = {
+        "success": bool,
+        "value": string
+        "rank_removed": string|None
+    }
+    """
     all_rank_names = get_role_dict().keys()
 
     # Identify obsolete roles the member currently holds
@@ -463,7 +471,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
     if not roles_to_remove:
         log(guild, msg := f"No obsolete rank roles to remove.")
-        return {"success": True, "value": msg, "rank_removed": []}
+        return {"success": True, "value": msg, "rank_removed": None}
 
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
@@ -476,7 +484,15 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         return {"success": False, "value": return_msg}
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str) -> dict:
-    """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
+    """
+    Ensures the role for rank_name exists, then gives it to member, removing other rank roles.
+
+    return_value = {
+        "success": bool,
+        "value": string|None
+        "rank_added": string|None
+    }
+    """
     if not rank_name:
         log(guild, return_msg := 'Returning! rank_name is None.')
         return {"success": False, "value": return_msg}
@@ -493,12 +509,8 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
             log(guild, return_msg := f"Assigned rank: {rank_name}.")
-            rank_added = rank_name
-        else:
-            log(guild, return_msg := f"Already has rank: {rank_name}.")
-            rank_added = None
 
-        return {"success": True, "value": return_msg, "rank_added": rank_added}
+        return {"success": True, "value": return_msg or f'Already has rank: {rank_name}', "rank_added": rank_name}
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
@@ -516,6 +528,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     Returns:
         dict: A status map containing {'success': bool} along with 'value' (details),
               plus role update results on success.
+
+    return_value = {
+        "success": bool,
+        "value": string,
+        "assign_rank_role": dict,
+        "remove_rank_role": dict,
+    }
+
     """
     await bot.wait_until_ready()
 
@@ -542,7 +562,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
-    log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+    # log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
@@ -552,6 +572,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     if not return_msg['remove_rank_role']['success']:
         return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
 
+    log(guild, success_msg := f'✅ Update successful for `{member.display_name}`')
     return return_msg | {'value': success_msg}
 
 async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
@@ -569,45 +590,38 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
 
     log(guild, f"[START AUTOMATIC UPDATE]")
 
-    failed_to_update: list = []
-    success_to_update: list = []
+    updated_list: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
+            summary = f'`{member.display_name}`'
 
             try:
                 return_value: dict = await _update_member(guild, member, session)
-                updated: bool = return_value['success']
+
+                member_update_msg = ', '.join([
+                    return_value['value'],
+                    return_value['assign_rank_role']['value'],
+                    return_value['remove_rank_role']['value']
+                ])
 
                 if on_progress:
-                    await on_progress(len(success_to_update), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
+                    await on_progress(len(updated_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
-                if not updated:
-                    raise Exception(return_value['value'])
+                if not return_value['success']:
+                    raise Exception(f'Update fail for `{member.display_name}`. {return_value['value']}')
 
-                changes = []
-
-                if rank_assigned := return_value.get('assign_rank_role', {}).get('rank_added'):
-                    changes.append(f"Assigned `{rank_assigned}`")
-
-                summary = f'`{member.display_name}`'
-                if changes:
-                    summary += ": " + ", ".join(changes)
-                success_to_update.append(f'\n{summary}')
+                summary += ": " + member_update_msg
+                updated_list.append(f'\n{summary}')
 
             except Exception as e:
-                failed_to_update.append(member.display_name)
+                summary += ": " + e
+                updated_list.append(f'\n{summary}')
                 log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, error: {e}")
 
-    log(guild,
-        f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}. Failed with {len(failed_to_update)}member{'' if len(failed_to_update) == 1 else 's'}"
-    )
-
-    if failed_to_update:
-        return {'success': False, 'value': ', '.join(failed_to_update)}
-
-    return {'success': True, 'value': ', '.join(success_to_update)}
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(updated_list)} member{'' if len(updated_list) == 1 else 's'}.")
+    return {'success': True, 'value': ', '.join(updated_list)}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
     if not interval_hours:
@@ -641,7 +655,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         try:
             channel_msg = f"⚠️ Automatic update finished with errors: {return_value['value']}"
             if return_value['success']:
-                channel_msg = f"✅ Automatic update complete. {'Updated: ' if return_value['value'] else ''}{return_value['value']}"
+                channel_msg = f"✅ Automatic update complete. Updated: {return_value['value']}"
 
             log(guild, channel_msg)
             await channel.send(channel_msg)

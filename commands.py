@@ -58,18 +58,16 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             async with aiohttp.ClientSession() as session:
                 return_value: dict = await helper._update_member(interaction.guild, target, session)
 
-                if return_value['success']:
-
-                    await interaction.edit_original_response(
-                        content = ', '.join([
-                            return_value['value'],
-                            return_value['assign_rank_role']['value'],
-                            return_value['remove_rank_role']['value']
-                        ])
-                    )
-
-                else:
+                if not return_value['success']:
                     raise Exception(f'Update fail for `{target.display_name}`. {return_value['value']}')
+
+                await interaction.edit_original_response(
+                    content = ', '.join([
+                        return_value['value'],
+                        return_value['assign_rank_role']['value'],
+                        return_value['remove_rank_role']['value']
+                    ])
+                )
             return
 
         # update everybody
