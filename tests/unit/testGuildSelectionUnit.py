@@ -132,7 +132,7 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(update_member.await_count, 2)
         self.assertTrue(update_result["success"])
-        self.assertIn("`Alice`: boom", update_result["value"])
+        self.assertIn("`Alice`: ❌ Error: boom", update_result["value"])
         self.assertIn("Bob", update_result["value"])
 
     # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
