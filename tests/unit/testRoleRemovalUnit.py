@@ -7,6 +7,7 @@ from helper import remove_rank_role
 class FakeRole:
     def __init__(self, name):
         self.name = name
+        self.mention = f"@{name}"
 
 class FakeMember:
     def __init__(self, roles):

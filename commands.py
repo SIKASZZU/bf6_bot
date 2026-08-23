@@ -47,8 +47,8 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
-    await helper.send_interaction_message(interaction, f'🔄 Updating...')
-    log(interaction.guild, f'(Updating... arguments: member: `{member.display_name if member else 'None'}`')
+    await helper.send_interaction_message(interaction, update_msg:=f'(Updating... {member.mention if member else ''}')
+    log(interaction.guild, update_msg)
 
     target = member or interaction.user
 
@@ -82,7 +82,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
 
         if not (return_value := await helper._run_guild_update(interaction.guild, on_progress=report_progress))['success']:
-            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {return_value['value']}.")
+            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players: {return_value['value']}.")
             return
 
         await interaction.edit_original_response(content=f"✅ Update successful. {return_value['value']}")

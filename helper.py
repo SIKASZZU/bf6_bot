@@ -366,7 +366,7 @@ async def on_member_remove(member: discord.Member):
     if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
-        log(member.guild, f"[LEFT] {member.display_name} ({str(member.id)}) left the guild - removed their link from data.")
+        log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -475,7 +475,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
-        removed_names = ", ".join(role.name for role in roles_to_remove)
+        removed_names = ", ".join(role.mention for role in roles_to_remove)
         log(guild, msg := f"Removed roles: {removed_names}.")
         return {"success": True, "value": msg, "rank_removed": removed_names}
 
@@ -502,16 +502,16 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, return_msg := f"Bot's role is too low to assign '{rank_name}' - move the bot's role higher.")
+        log(guild, return_msg := f"Bot's role is too low to assign {role.mention} - move the bot's role higher.")
         return {"success": False, "value": return_msg}
 
     try:
         return_msg = None
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {rank_name}.")
+            log(guild, return_msg := f"Assigned rank: {role.mention}.")
 
-        return {"success": True, "value": return_msg or f'Already has rank: {rank_name}', "rank_added": rank_name if return_msg else None }
+        return {"success": True, "value": return_msg or f'Already has rank: {role.mention}', "rank_added": rank_name if return_msg else None }
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
@@ -547,23 +547,23 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': fail_msg}
 
     if not (entry := get_player_entry(load_data(), guild.id, member.id)):
-        log(guild, fail_msg := f"❌ discord: {member.display_name}. Not linked. Skipping.")
+        log(guild, fail_msg := f"❌ discord: {member.mention}. Not linked. Skipping.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
     if not (stats := await fetch_player_stats(guild, session, name, platform)):
-        log(guild, fail_msg := f"⚠️ Data fetch failed for discord: `{member.display_name}`. If link for member is correct, do not stress. API failure.")
+        log(guild, fail_msg := f"⚠️ Data fetch failed for discord: {member.mention}. If link for member is correct, do not stress. API failure.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        log(guild, fail_msg := f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
+        log(guild, fail_msg := f"[WARNING] Could not extract rank for discord: {member.mention}, link: {name}, {platform}.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
-    # log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+    # log(guild, success_msg := f"✅ discord: {member.mention} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
@@ -573,7 +573,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     if not return_msg['remove_rank_role']['success']:
         return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
 
-    log(guild, success_msg := f'✅ Update successful for `{member.display_name}`')
+    log(guild, success_msg := f'✅ Update successful for {member.mention}')
     return return_msg | {'value': success_msg}
 
 async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
@@ -610,7 +610,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                     await on_progress(len(updated_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Error: Update fail for `{member.display_name}`. {return_value['value']}')
+                    raise Exception(f'❌ Error: Update fail for {member.mention}. {return_value['value']}')
 
                 updated_list.append(f'\n{member_update_msg}')
 
