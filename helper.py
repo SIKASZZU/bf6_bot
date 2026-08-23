@@ -576,6 +576,19 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     log(guild, success_msg := f'✅ Update successful for {member.mention}')
     return return_msg | {'value': success_msg}
 
+def _build_update_summary(return_value: dict) -> str:
+    parts = [return_value['value']]
+
+    assign = return_value.get('assign_rank_role') or {}
+    if assign.get('rank_added'):
+        parts.append(assign['value'])
+
+    remove = return_value.get('remove_rank_role') or {}
+    if remove.get('rank_removed'):
+        parts.append(remove['value'])
+
+    return ', '.join(parts)
+
 async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
@@ -599,12 +612,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
 
             try:
                 return_value: dict = await _update_member(guild, member, session)
-
-                member_update_msg = ', '.join([
-                    return_value['value'],
-                    return_value['assign_rank_role']['value'],
-                    return_value['remove_rank_role']['value']
-                ])
+                member_update_msg = _build_update_summary(return_value)
 
                 if on_progress:
                     await on_progress(len(updated_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))

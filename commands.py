@@ -61,13 +61,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                 if not return_value['success']:
                     raise Exception(f'Update fail for `{target.display_name}`. {return_value['value']}')
 
-                await interaction.edit_original_response(
-                    content = ', '.join([
-                        return_value['value'],
-                        return_value['assign_rank_role']['value'],
-                        return_value['remove_rank_role']['value']
-                    ])
-                )
+                await interaction.edit_original_response(content = helper._build_update_summary(return_value))
             return
 
         # update everybody
