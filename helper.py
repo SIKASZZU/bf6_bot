@@ -596,7 +596,6 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
-            summary = f'`{member.display_name}`'
 
             try:
                 return_value: dict = await _update_member(guild, member, session)
@@ -611,14 +610,12 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                     await on_progress(len(updated_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'Update fail for `{member.display_name}`. {return_value['value']}')
+                    raise Exception(f'❌ Error: Update fail for `{member.display_name}`. {return_value['value']}')
 
-                summary += ": " + member_update_msg
-                updated_list.append(f'\n{summary}')
+                updated_list.append(f'\n{member_update_msg}')
 
             except Exception as e:
-                summary += ": " + f'❌ Error: {e}'
-                log(guild, f"{summary}")
+                log(guild, summary := f'{e}')
                 updated_list.append(f'\n{summary}')
 
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(updated_list)} member{'' if len(updated_list) == 1 else 's'}.")
