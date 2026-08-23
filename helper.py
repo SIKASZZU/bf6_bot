@@ -617,9 +617,9 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                 updated_list.append(f'\n{summary}')
 
             except Exception as e:
-                summary += ": " + f'{e}'
+                summary += ": " + f'❌ Error: {e}'
+                log(guild, f"{summary}")
                 updated_list.append(f'\n{summary}')
-                log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, error: {e}")
 
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(updated_list)} member{'' if len(updated_list) == 1 else 's'}.")
     return {'success': True, 'value': ', '.join(updated_list)}
