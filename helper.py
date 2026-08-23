@@ -506,11 +506,12 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     try:
+        return_msg = None
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
             log(guild, return_msg := f"Assigned rank: {rank_name}.")
 
-        return {"success": True, "value": return_msg or f'Already has rank: {rank_name}', "rank_added": rank_name}
+        return {"success": True, "value": return_msg or f'Already has rank: {rank_name}', "rank_added": rank_name if return_msg else None }
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
