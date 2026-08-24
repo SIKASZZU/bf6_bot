@@ -261,27 +261,39 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
 
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
+    # 1. DM Guard
+    if not interaction.guild:
+        return True
 
-    # timer before next command
+    # 2. Rate-limiter / Cooldown check
     global _last_command_time
     now = time.monotonic()
     if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
-        return False
+        raise app_commands.CheckFailure(f"{REQUEST_INTERVAL_SECONDS} cooldown after every command!")
     _last_command_time = now
 
-    guild_config = load_config().get(str(interaction.guild.id), {})
+    # Load full configuration safely
+    full_config = load_config()
+    guild_id_str = str(interaction.guild.id)
+    guild_config = full_config.get(guild_id_str, {})
 
-    # admin-or-role check
+    # 3. Admin-or-role check
     if not interaction.user.guild_permissions.administrator:
         role_id = guild_config.get('permissioned_role_id')
         if not (role_id and discord.utils.get(interaction.user.roles, id=role_id)):
-            raise app_commands.CheckFailure(f"Missing {interaction.user.guild.get_role(role_id).mention}/Administrator")
+            role = interaction.guild.get_role(role_id) if role_id else None
+            role_str = role.mention if role else "a required role"
+            raise app_commands.CheckFailure(f"Missing {role_str} or Administrator permissions.")
 
-    # report-channel restriction
-    if (channel_id := guild_config.get('channel_id')) and (interaction.command.name if interaction.command else None) not in CHANNEL_CHECK_EXEMPT:
+    # 4. Report-channel restriction
+    if (channel_id := guild_config.get('channel_id')):
         if interaction.guild.get_channel(channel_id) is None:
-            # Channel was deleted - don't lock the server out, treat as unconfigured.
+            # Channel deleted - reset setting safely across full config
+            guild_config['channel_id'] = None
+            full_config[guild_id_str] = guild_config
+            save_config(full_config)
             return True
+
         if interaction.channel.id != channel_id:
             raise WrongChannelError(channel_id)
 
@@ -315,7 +327,7 @@ async def on_guild_join(guild):
 
     if server_key not in config:
         config[server_key] = {
-            "channel_id": guild._system_channel_id,
+            "channel_id": None,
             "update_interval": AUTO_UPDATE_TIMER_HOURS
         }
         save_config(config)
