@@ -10,7 +10,7 @@ DEV_MODE = os.getenv('DEV_MODE', 'false').lower() == 'true'
 
 # Enable intents (Members intent is mandatory for role manipulation)
 intents = discord.Intents.default()
-intents.message_content = True
+# intents.message_content = True
 intents.members = True
 
 COMMAND_PREFIX = '/'
