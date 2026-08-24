@@ -119,14 +119,13 @@ def _build_commands_message():
 def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
-    member_name = guild.get_member(int(member.id)).name if guild.get_member(int(member.id)) else f"<left server> ({member.id})"
+    resolved = guild.get_member(int(member.id)) if member else None
+    member_name = resolved.name if resolved else (f"<left server> ({member.id})" if member else None)
+
     embed = discord.Embed(
         title="📊 Linked accounts" if not member else f"{member_name}'s linked account",
         color=discord.Color.blue()
     )
-    if not server_data:
-        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
-        return embed
 
     lines = []
 
@@ -141,6 +140,10 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
             lines.append(
                 f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
+
+    if not server_data or not lines:
+        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
+        return embed
 
     embed.description = "\n".join(lines)
     return embed
