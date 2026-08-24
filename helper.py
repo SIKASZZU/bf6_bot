@@ -102,16 +102,17 @@ def _build_commands_message():
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
         field_value = f"`{prefix}{name}` — {help_text}"
 
-        if name in CHANNEL_CHECK_EXEMPT:
-            exempt_fields.append(field_value)
-        else:
-            restricted_fields.append(field_value)
+        # if name in CHANNEL_CHECK_EXEMPT:
+        #     exempt_fields.append(field_value)
+        # else:
+        restricted_fields.append(field_value)
 
-    if exempt_fields:
-        embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
+    # if exempt_fields:
+    #     embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
 
     if restricted_fields:
-        embed.add_field(name="Available in only set channel", value="\n".join(restricted_fields), inline=False)
+        #Available in only set channel
+        embed.add_field(name="", value="\n".join(restricted_fields), inline=False)
 
     return embed
 

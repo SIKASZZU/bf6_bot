@@ -107,14 +107,28 @@ async def setup_roles(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='set-channel', description='Bot will be set to talk in that channel.')
-async def set_channel(interaction: discord.Interaction):
+@app_commands.describe(
+    channel='Channel to use (defaults to the channel you run this in)'
+)
+async def set_channel(interaction: discord.Interaction, channel: discord.TextChannel = None):
+    target_channel = channel or interaction.channel
+
+    perms = target_channel.permissions_for(interaction.guild.me)
+    if not (perms.view_channel and perms.send_messages):
+        await helper.send_interaction_message(
+            interaction,
+            f"❌ I don't have permission to send messages in {target_channel.mention}. ",
+            ephemeral=True
+        )
+        return
+
     config = load_config()
-    config.setdefault(str(interaction.guild.id))["channel_id"] = interaction.channel.id
+    config.setdefault(str(interaction.guild.id), {})["channel_id"] = target_channel.id
     save_config(config)
 
     message = discord.Embed(
         title="✅ Channel Configured",
-        description=f"This channel ({interaction.channel.mention}) will now receive the {load_config().get(str(interaction.guild.id)).get('update_interval')}h automatic stats updates.",
+        description=f"This channel ({target_channel.mention}) will now receive the {load_config().get(str(interaction.guild.id)).get('update_interval')}h automatic stats updates.",
         color=discord.Color.green()
     )
     await helper.send_interaction_message(interaction, content=message)
