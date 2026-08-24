@@ -8,7 +8,7 @@ from ranks import create_roles
 
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 @app_commands.describe(
     name=f'The {DEFAULT_PLATFORM} account name',
     member='Discord member'
@@ -40,7 +40,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     log(interaction.guild, msg)
 
 @bot.tree.command(name='update', description='Gather latest statistics and update roles accordingly.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member',
 )
@@ -82,7 +82,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         await interaction.edit_original_response(content=fail_msg)
 
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def setup_roles(interaction: discord.Interaction):
     created, skipped, failed = await create_roles(interaction.guild)
 
@@ -110,7 +110,7 @@ async def setup_roles(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='set-channel', description='Bot will be set to talk in that channel.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def set_channel(interaction: discord.Interaction):
     config = load_config()
     config.setdefault(str(interaction.guild.id))["channel_id"] = interaction.channel.id
@@ -124,7 +124,7 @@ async def set_channel(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='set-update-interval', description='Set how often automatic updates should happen. Set time in hours (minimum 1 hour).')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 @app_commands.describe(
     hours='Updates in set hour interval (minimum 1 hour)'
 )
@@ -153,22 +153,25 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
     await helper.send_interaction_message(interaction, content=success_message)
 
 @bot.tree.command(name='commands', description='Display all the commands possible.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def display_commands(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_commands_message())
 
-@bot.tree.command(name='linked', description=f'Have all the links be displayed.')
-@helper.is_admin_or_has_role()
-async def display_links(interaction: discord.Interaction):
-    await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data()))
+@bot.tree.command(name='linked', description=f'Display established links.')
+# @helper.is_admin_or_has_role()
+@app_commands.describe(
+    member='Discord member',
+)
+async def display_links(interaction: discord.Interaction, member: discord.Member = None):
+    await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data(), member))
 
 @bot.tree.command(name='unlinked', description=f'Have all the unlinked members be displayed.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def display_unlinks(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_unlinked_message(interaction.guild, helper.load_data()))
 
 @bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def display_info(interaction: discord.Interaction):
     config = load_config()
     guild_config = config.get(str(interaction.guild.id))
@@ -241,7 +244,7 @@ async def display_info(interaction: discord.Interaction):
 
 
 @bot.tree.command(name='setup', description='Display setup steps for the bot.', extras={'aliases': ['instructions']})
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def display_setup(interaction: discord.Interaction):
     """Sends detailed setup instructions."""
     message = discord.Embed(
@@ -283,7 +286,7 @@ async def display_setup(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='unlink', description="Unlink a member's Discord account from their game account.")
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 @app_commands.describe(
     member='Discord member'
     )
@@ -339,7 +342,7 @@ async def assign_management_role(interaction: discord.Interaction, role: discord
     await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='show-authorised-role', description="Display management role.")
-@helper.is_admin_or_has_role()
+# @helper.is_admin_or_has_role()
 async def display_management_role(interaction: discord.Interaction):
 
     message = discord.Embed(

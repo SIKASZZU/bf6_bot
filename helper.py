@@ -115,23 +115,30 @@ def _build_commands_message():
 
     return embed
 
-def _build_linked_message(guild: discord.Guild, data: dict) -> discord.Embed:
+def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
     embed = discord.Embed(
-        title="📊 Linked accounts",
+        title="📊 Linked accounts" if not member else f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}'s linked account",
         color=discord.Color.blue()
     )
 
     if not server_data:
-        embed.description = "No linked accounts found for this server in the database."
+        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
         return embed
 
     lines = []
 
     for discord_id, entry in server_data.items():
-        lines.append(
-            f"{guild.get_member(int(discord_id)).display_name if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')} ({entry.get('platform', DEFAULT_PLATFORM)})"
+        if member and discord_id == member.id:
+            lines.append(
+                f"{entry.get('name', 'unknown')} {entry.get('career_rank', '')} {entry.get('rank_name', '')}"
+            )
+            break
+
+        elif not member:
+            lines.append(
+                f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')} {entry.get('career_rank', '')} {entry.get('rank_name', '')}"
             )
 
     embed.description = "\n".join(lines)
@@ -553,7 +560,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
-    # log(guild, success_msg := f"✅ discord: {member.mention} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+
+    # lol
+    data = load_data()
+    data[str(guild.id)][str(member.id)].update({
+        'rank_name': concise_rank_name,
+        'career_rank': rankValue
+    })
+    save_data(data)
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
