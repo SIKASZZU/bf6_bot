@@ -83,7 +83,8 @@ def _build_commands_message():
         color=discord.Color.blue()
     )
 
-    command_fields = []
+    exempt_fields = []
+    restricted_fields = []
 
     seen_names = set()
     all_commands = list(bot.commands) + list(_get_tree_commands())
@@ -96,16 +97,21 @@ def _build_commands_message():
             continue
         seen_names.add(name)
 
-
         prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
 
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
         field_value = f"`{prefix}{name}` — {help_text}"
 
-        command_fields.append(field_value)
+        if name in CHANNEL_CHECK_EXEMPT:
+            exempt_fields.append(field_value)
+        else:
+            restricted_fields.append(field_value)
 
-    if command_fields:
-        embed.add_field(name="", value="\n".join(command_fields), inline=False)
+    if exempt_fields:
+        embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
+
+    if restricted_fields:
+        embed.add_field(name="Available in only set channel", value="\n".join(restricted_fields), inline=False)
 
     return embed
 

@@ -40,7 +40,7 @@ DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 3
 
-CHANNEL_CHECK_EXEMPT = {'set-channel', 'set-authorised-role', 'show-authorised-role'}
+CHANNEL_CHECK_EXEMPT = ['set-channel', 'set-authorised-role', 'show-authorised-role']
 
 running_loops: dict[int, tasks.Loop] = {}
 
