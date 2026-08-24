@@ -15,6 +15,8 @@ class FakeMember:
     def __init__(self, id, display_name):
         self.id = id
         self.display_name = display_name
+        self.name = display_name
+        self.mention = f"<@{id}>"
 
 
 class FakeGuildWithMember(FakeGuild):
@@ -58,17 +60,17 @@ class TestCommandHelpMessages(unittest.TestCase):
         message = helper._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
-        self.assertInEmbed('EA', message)
         self.assertInEmbed('456', message)
 
-    def test_build_linked_message_uses_display_name_when_member_found(self):
+    def test_build_linked_message_uses_member_mention_when_member_found(self):
         data = {'123': {'456': {'name': 'alice', 'platform': 'EA'}}}
         member = FakeMember(id=456, display_name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
         message = helper._build_linked_message(fake_guild, data)
 
-        self.assertInEmbed('CoolPlayer', message)
+        self.assertInEmbed('alice', message)
+        self.assertInEmbed('<@456>', message)
         self.assertNotInEmbed('<left server>', message)
 
 if __name__ == '__main__':

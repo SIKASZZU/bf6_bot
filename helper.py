@@ -102,37 +102,48 @@ def _build_commands_message():
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
         field_value = f"`{prefix}{name}` — {help_text}"
 
-        if name in CHANNEL_CHECK_EXEMPT:
-            exempt_fields.append(field_value)
-        else:
-            restricted_fields.append(field_value)
+        # if name in CHANNEL_CHECK_EXEMPT:
+        #     exempt_fields.append(field_value)
+        # else:
+        restricted_fields.append(field_value)
 
-    if exempt_fields:
-        embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
+    # if exempt_fields:
+    #     embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
 
     if restricted_fields:
-        embed.add_field(name="Available in only set channel", value="\n".join(restricted_fields), inline=False)
+        #Available in only set channel
+        embed.add_field(name="", value="\n".join(restricted_fields), inline=False)
 
     return embed
 
-def _build_linked_message(guild: discord.Guild, data: dict) -> discord.Embed:
+def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
     server_data = data.get(str(guild.id))
 
+    resolved = guild.get_member(int(member.id)) if member else None
+    member_name = resolved.name if resolved else (f"<left server> ({member.id})" if member else None)
+
     embed = discord.Embed(
-        title="📊 Linked accounts",
+        title="📊 Linked accounts" if not member else f"{member_name}'s linked account",
         color=discord.Color.blue()
     )
-
-    if not server_data:
-        embed.description = "No linked accounts found for this server in the database."
-        return embed
 
     lines = []
 
     for discord_id, entry in server_data.items():
-        lines.append(
-            f"{guild.get_member(int(discord_id)).display_name if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')} ({entry.get('platform', DEFAULT_PLATFORM)})"
+        if member and discord_id == str(member.id):
+            lines.append(
+                f"{entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
+            break
+
+        elif not member:
+            lines.append(
+                f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+            )
+
+    if not server_data or not lines:
+        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
+        return embed
 
     embed.description = "\n".join(lines)
     return embed
@@ -249,37 +260,42 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
     await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
 
-def is_admin_or_has_role():
-    """Passes if the invoking user is a server administrator OR has the management role."""
-    def predicate(interaction: discord.Interaction) -> bool:
-        if interaction.user.guild_permissions.administrator:
-            return True
-
-        if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
-            return discord.utils.get(interaction.user.roles, id=role_id) is not None
-
-    return app_commands.check(predicate)
-
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
+    # 1. DM Guard
+    if not interaction.guild:
+        return True
+
+    # 2. Rate-limiter / Cooldown check
     global _last_command_time
     now = time.monotonic()
     if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
-        return False
+        raise app_commands.CheckFailure(f"{REQUEST_INTERVAL_SECONDS} cooldown after every command!")
     _last_command_time = now
 
-    guild_config = load_config().get(str(interaction.guild.id), {})
+    # Load full configuration safely
+    full_config = load_config()
+    guild_id_str = str(interaction.guild.id)
+    guild_config = full_config.get(guild_id_str, {})
 
-    # admin-or-role check
+    # 3. Admin-or-role check
     if not interaction.user.guild_permissions.administrator:
         role_id = guild_config.get('permissioned_role_id')
         if not (role_id and discord.utils.get(interaction.user.roles, id=role_id)):
-            raise app_commands.CheckFailure("Missing admin/role")
+            role = interaction.guild.get_role(role_id) if role_id else None
+            role_str = role.mention if role else "a required role"
+            raise app_commands.CheckFailure(f"Missing {role_str} or Administrator permissions.")
 
-    # report-channel restriction
-    command_name = interaction.command.name if interaction.command else None
-    channel_id = guild_config.get('channel_id')
-    if channel_id and command_name not in CHANNEL_CHECK_EXEMPT and interaction.channel.id != channel_id:
-        raise WrongChannelError(channel_id)
+    # 4. Report-channel restriction
+    if (channel_id := guild_config.get('channel_id')):
+        if interaction.guild.get_channel(channel_id) is None:
+            # Channel deleted - reset setting safely across full config
+            guild_config['channel_id'] = None
+            full_config[guild_id_str] = guild_config
+            save_config(full_config)
+            return True
+
+        if interaction.channel.id != channel_id:
+            raise WrongChannelError(channel_id)
 
     return True
 
@@ -311,7 +327,7 @@ async def on_guild_join(guild):
 
     if server_key not in config:
         config[server_key] = {
-            "channel_id": guild._system_channel_id,
+            "channel_id": None,
             "update_interval": AUTO_UPDATE_TIMER_HOURS
         }
         save_config(config)
@@ -368,22 +384,19 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
             API_URL = build_api_url(name, platform)
             async with session.get(API_URL) as response:
                 if response.status != 200:
-                    raise Exception(f'{response.status}')
+                    raise Exception(f'{response}')
 
                 stats = await response.json()
 
                 if isinstance(stats, dict) and "errors" in stats:
-                    errors = stats["errors"]
-                    if any("not found" in str(e).lower() for e in errors):
-                        log(guild, f"❌ ({name}, {platform}) not found on gametools - check the linked name/platform.")
-                        return None
+                    raise Exception(f"{stats['errors']}")
 
-                    raise Exception(f"{errors}")
                 return stats
 
         except Exception as e:
             last_error = e
-            if attempt < API_MAX_RETRIES:
+            if attempt <= API_MAX_RETRIES:
+                # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
             continue
 
@@ -552,7 +565,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
-    # log(guild, success_msg := f"✅ discord: {member.mention} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+
+    # lol
+    data = load_data()
+    data[str(guild.id)][str(member.id)].update({
+        'rank_name': concise_rank_name,
+        'career_rank': rankValue
+    })
+    save_data(data)
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
