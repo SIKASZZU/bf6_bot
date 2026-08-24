@@ -47,7 +47,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
-    await helper.send_interaction_message(interaction, update_msg:=f'(Updating... {member.mention if member else ''}')
+    await helper.send_interaction_message(interaction, update_msg:=f'(Updating... {member.mention if member else ''})')
     log(interaction.guild, update_msg)
 
     target = member or interaction.user

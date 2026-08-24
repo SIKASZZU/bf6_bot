@@ -368,22 +368,19 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
             API_URL = build_api_url(name, platform)
             async with session.get(API_URL) as response:
                 if response.status != 200:
-                    raise Exception(f'{response.status}')
+                    raise Exception(f'{response}')
 
                 stats = await response.json()
 
                 if isinstance(stats, dict) and "errors" in stats:
-                    errors = stats["errors"]
-                    if any("not found" in str(e).lower() for e in errors):
-                        log(guild, f"❌ ({name}, {platform}) not found on gametools - check the linked name/platform.")
-                        return None
+                    raise Exception(f"{stats['errors']}")
 
-                    raise Exception(f"{errors}")
                 return stats
 
         except Exception as e:
             last_error = e
-            if attempt < API_MAX_RETRIES:
+            if attempt <= API_MAX_RETRIES:
+                # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
             continue
 
