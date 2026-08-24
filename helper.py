@@ -261,6 +261,8 @@ def is_admin_or_has_role():
     return app_commands.check(predicate)
 
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
+
+    # timer before next command
     global _last_command_time
     now = time.monotonic()
     if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
@@ -273,13 +275,15 @@ async def global_interaction_check(interaction: discord.Interaction) -> bool:
     if not interaction.user.guild_permissions.administrator:
         role_id = guild_config.get('permissioned_role_id')
         if not (role_id and discord.utils.get(interaction.user.roles, id=role_id)):
-            raise app_commands.CheckFailure("Missing admin/role")
+            raise app_commands.CheckFailure(f"Missing {interaction.user.guild.get_role(role_id).mention}/Administrator")
 
     # report-channel restriction
-    command_name = interaction.command.name if interaction.command else None
-    channel_id = guild_config.get('channel_id')
-    if channel_id and command_name not in CHANNEL_CHECK_EXEMPT and interaction.channel.id != channel_id:
-        raise WrongChannelError(channel_id)
+    if (channel_id := guild_config.get('channel_id')) and (interaction.command.name if interaction.command else None) not in CHANNEL_CHECK_EXEMPT:
+        if interaction.guild.get_channel(channel_id) is None:
+            # Channel was deleted - don't lock the server out, treat as unconfigured.
+            return True
+        if interaction.channel.id != channel_id:
+            raise WrongChannelError(channel_id)
 
     return True
 
