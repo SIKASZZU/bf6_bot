@@ -128,7 +128,7 @@ async def set_channel(interaction: discord.Interaction, channel: discord.TextCha
 
     message = discord.Embed(
         title="✅ Channel Configured",
-        description=f"This channel ({target_channel.mention}) will now receive the {load_config().get(str(interaction.guild.id)).get('update_interval')}h automatic stats updates.",
+        description=f"Channel ({target_channel.mention}) will be used for communication with and for this bot.",
         color=discord.Color.green()
     )
     await helper.send_interaction_message(interaction, content=message)
