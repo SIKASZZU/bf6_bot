@@ -47,8 +47,8 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
-    await helper.send_interaction_message(interaction, f'🔄 Updating...')
-    log(interaction.guild, f'(Updating... arguments: member: `{member.display_name if member else 'None'}`')
+    await helper.send_interaction_message(interaction, update_msg:=f'(Updating... {member.mention if member else ''}')
+    log(interaction.guild, update_msg)
 
     target = member or interaction.user
 
@@ -58,18 +58,10 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             async with aiohttp.ClientSession() as session:
                 return_value: dict = await helper._update_member(interaction.guild, target, session)
 
-                if return_value['success']:
-
-                    await interaction.edit_original_response(
-                        content = ', '.join([
-                            return_value['value'],
-                            return_value['assign_rank_role']['value'],
-                            return_value['remove_rank_role']['value']
-                        ])
-                    )
-
-                else:
+                if not return_value['success']:
                     raise Exception(f'Update fail for `{target.display_name}`. {return_value['value']}')
+
+                await interaction.edit_original_response(content = helper._build_update_summary(return_value))
             return
 
         # update everybody
@@ -82,12 +74,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             last_edit = now
             await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
 
-
-        if not (return_value := await helper._run_guild_update(interaction.guild, on_progress=report_progress))['success']:
-            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players (discord display names): {return_value['value']}.")
-            return
-
-        await interaction.edit_original_response(content=f"✅ Update successful. {return_value['value']}")
+        return_value = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
+        await interaction.edit_original_response(content=f"{return_value['value']}")
 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
@@ -242,8 +230,6 @@ async def display_info(interaction: discord.Interaction):
         value=f"Use `{COMMAND_PREFIX}commands` to see all available commands",
         inline=False
     )
-
-    message.set_footer(text="For detailed instructions, use !setup or !instructions")
 
     await helper.send_interaction_message(interaction, content=message)
 

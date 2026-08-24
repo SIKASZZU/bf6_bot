@@ -29,6 +29,11 @@ def save_data(data: dict):
     conn.commit()
     conn.close()
 
+class WrongChannelError(app_commands.CheckFailure):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(f"Command must be used in <#{channel_id}>")
+
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):
@@ -78,7 +83,8 @@ def _build_commands_message():
         color=discord.Color.blue()
     )
 
-    command_fields = []
+    exempt_fields = []
+    restricted_fields = []
 
     seen_names = set()
     all_commands = list(bot.commands) + list(_get_tree_commands())
@@ -91,16 +97,21 @@ def _build_commands_message():
             continue
         seen_names.add(name)
 
-
         prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
 
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
         field_value = f"`{prefix}{name}` — {help_text}"
 
-        command_fields.append(field_value)
+        if name in CHANNEL_CHECK_EXEMPT:
+            exempt_fields.append(field_value)
+        else:
+            restricted_fields.append(field_value)
 
-    if command_fields:
-        embed.add_field(name="", value="\n".join(command_fields), inline=False)
+    if exempt_fields:
+        embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
+
+    if restricted_fields:
+        embed.add_field(name="Available in only set channel", value="\n".join(restricted_fields), inline=False)
 
     return embed
 
@@ -148,7 +159,6 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
         embed.description = "\n".join(lines)
     return embed
 
-# TODO: siin on bug, kui on interval 1 h siis failib displaymast
 def _get_time_to_next_update(guild: discord.Guild):
     try:
         loop = running_loops.get(guild.id)
@@ -228,7 +238,9 @@ REQUEST_INTERVAL_SECONDS = 2
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    """Catches errors from slash commands (on_command_error above only fires for prefix commands)."""
+    if isinstance(error, WrongChannelError):
+        await send_interaction_message(interaction, f"❌ This command can only be used in <#{error.channel_id}>.", ephemeral=True)
+        return
 
     if isinstance(error, app_commands.CheckFailure):
         await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
@@ -247,18 +259,31 @@ def is_admin_or_has_role():
             return discord.utils.get(interaction.user.roles, id=role_id) is not None
 
     return app_commands.check(predicate)
-async def global_rate_limit(interaction: discord.Interaction):
+
+async def global_interaction_check(interaction: discord.Interaction) -> bool:
     global _last_command_time
-    now = time.monotonic() # lol wtf
-
+    now = time.monotonic()
     if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
-        # silently blocks the command from running
         return False
-
     _last_command_time = now
+
+    guild_config = load_config().get(str(interaction.guild.id), {})
+
+    # admin-or-role check
+    if not interaction.user.guild_permissions.administrator:
+        role_id = guild_config.get('permissioned_role_id')
+        if not (role_id and discord.utils.get(interaction.user.roles, id=role_id)):
+            raise app_commands.CheckFailure("Missing admin/role")
+
+    # report-channel restriction
+    command_name = interaction.command.name if interaction.command else None
+    channel_id = guild_config.get('channel_id')
+    if channel_id and command_name not in CHANNEL_CHECK_EXEMPT and interaction.channel.id != channel_id:
+        raise WrongChannelError(channel_id)
+
     return True
 
-bot.tree.interaction_check = global_rate_limit
+bot.tree.interaction_check = global_interaction_check
 
 @bot.event
 async def on_ready():
@@ -273,43 +298,6 @@ async def on_ready():
 
     # if not update_all_players.is_running():
     #     update_all_players.start()
-
-@bot.event
-async def on_command_error(ctx, error):
-    """
-    Catches errors from any command and prints a helpful usage message
-    to the channel instead of letting the traceback go unseen in the console.
-    """
-
-    if isinstance(error, (commands.MissingPermissions, commands.MissingRole, commands.MissingAnyRole)):
-        await ctx.send(f"❌ You don't have permission to use this command. Try again in {error.retry_after:.1f}s")
-        return
-
-    # arva ara kuidas muuta retry_after v22rtus
-    if isinstance(error, commands.CommandOnCooldown):
-        await ctx.send(f"⏳ Slow down! Try again in {error.retry_after:.1f}s.")
-        return
-
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(
-            f"❌ Missing argument: `{error.param.name}`\n"
-            f"Usage: `!{ctx.command.qualified_name} {ctx.command.signature}`"
-        )
-        return
-
-    if isinstance(error, commands.BadArgument):
-        await ctx.send(
-            f"❌ Couldn't understand one of the arguments you gave.\n"
-            f"Usage: `!{ctx.command.qualified_name} {ctx.command.signature}`"
-        )
-        return
-
-    if isinstance(error, commands.CheckFailure):
-        await ctx.send("⏳ Bot is busy, try again in a moment.")
-        return
-
-    log(ctx.guild, f"Unhandled error in command '{ctx.command}': {error}")
-    await ctx.send(f"❌ An unexpected error occurred: {error}")
 
 @bot.event
 async def on_guild_join(guild):
@@ -367,7 +355,7 @@ async def on_member_remove(member: discord.Member):
     if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
-        log(member.guild, f"[LEFT] {member.display_name} ({str(member.id)}) left the guild - removed their link from data.")
+        log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -453,7 +441,15 @@ async def get_role(guild: discord.Guild, rank_name: str):
     return role
 
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
-    """Removes all obsolete rank roles from a member, keeping only their current rank role."""
+    """
+    Removes all obsolete rank roles from a member, keeping only their current rank role.
+
+    return_value = {
+        "success": bool,
+        "value": string
+        "rank_removed": string|None
+    }
+    """
     all_rank_names = get_role_dict().keys()
 
     # Identify obsolete roles the member currently holds
@@ -464,20 +460,28 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
     if not roles_to_remove:
         log(guild, msg := f"No obsolete rank roles to remove.")
-        return {"success": True, "value": msg}
+        return {"success": True, "value": msg, "rank_removed": None}
 
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
-        removed_names = ", ".join(role.name for role in roles_to_remove)
+        removed_names = ", ".join(role.mention for role in roles_to_remove)
         log(guild, msg := f"Removed roles: {removed_names}.")
-        return {"success": True, "value": msg}
+        return {"success": True, "value": msg, "rank_removed": removed_names}
 
     except Exception as e:
         log(guild, return_msg := f"Remove rank error: {e}")
         return {"success": False, "value": return_msg}
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str) -> dict:
-    """Ensures the role for rank_name exists, then gives it to member, removing other rank roles."""
+    """
+    Ensures the role for rank_name exists, then gives it to member, removing other rank roles.
+
+    return_value = {
+        "success": bool,
+        "value": string|None
+        "rank_added": string|None
+    }
+    """
     if not rank_name:
         log(guild, return_msg := 'Returning! rank_name is None.')
         return {"success": False, "value": return_msg}
@@ -487,17 +491,16 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, return_msg := f"Bot's role is too low to assign '{rank_name}' - move the bot's role higher.")
+        log(guild, return_msg := f"Bot's role is too low to assign {role.mention} - move the bot's role higher.")
         return {"success": False, "value": return_msg}
 
     try:
+        return_msg = None
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {rank_name}.")
-        else:
-            log(guild, return_msg := f"Already has rank: {rank_name}.")
+            log(guild, return_msg := f"Assigned rank: {role.mention}.")
 
-        return {"success": True, "value": return_msg}
+        return {"success": True, "value": return_msg or f'Already has rank: {role.mention}', "rank_added": rank_name if return_msg else None }
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
@@ -515,6 +518,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     Returns:
         dict: A status map containing {'success': bool} along with 'value' (details),
               plus role update results on success.
+
+    return_value = {
+        "success": bool,
+        "value": string,
+        "assign_rank_role": dict,
+        "remove_rank_role": dict,
+    }
+
     """
     await bot.wait_until_ready()
 
@@ -525,23 +536,23 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': fail_msg}
 
     if not (entry := get_player_entry(load_data(), guild.id, member.id)):
-        log(guild, fail_msg := f"❌ discord: {member.display_name}. Not linked. Skipping.")
+        log(guild, fail_msg := f"❌ Not linked. Skipping.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
     if not (stats := await fetch_player_stats(guild, session, name, platform)):
-        log(guild, fail_msg := f"⚠️ Data fetch failed for discord: `{member.display_name}`. If link for member is correct, do not stress. API failure.")
+        log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        log(guild, fail_msg := f"[WARNING] Could not extract rank for discord: {member.display_name}, link: {name}, {platform}.")
+        log(guild, fail_msg := f"[WARNING] Could not extract rank.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
-    log(guild, success_msg := f"✅ discord: {member.display_name} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
+    # log(guild, success_msg := f"✅ discord: {member.mention} (ea_name: {name}, platform: {platform}, level: {rankValue}, rank name: {concise_rank_name})")
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
@@ -551,7 +562,21 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     if not return_msg['remove_rank_role']['success']:
         return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
 
+    log(guild, success_msg := f'✅ Update successful for {member.mention}')
     return return_msg | {'value': success_msg}
+
+def _build_update_summary(return_value: dict) -> str:
+    parts = [return_value['value']]
+
+    assign = return_value.get('assign_rank_role') or {}
+    if assign.get('rank_added'):
+        parts.append(assign['value'])
+
+    remove = return_value.get('remove_rank_role') or {}
+    if remove.get('rank_removed'):
+        parts.append(remove['value'])
+
+    return ', '.join(parts)
 
 async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
@@ -562,14 +587,14 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     """
     check = check_guild_requirements(guild)
     if not check["ok"]:
-        fail_msg = "[ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
+        fail_msg = "❌ [ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
         log(guild, fail_msg)
         return {'success': False, 'value': fail_msg}
 
     log(guild, f"[START AUTOMATIC UPDATE]")
 
-    failed_to_update: list = []
-    success_to_update: list = []
+    player_update_summary_list: list = []
+    failed_player_updates_summary_list: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
@@ -577,29 +602,23 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
 
             try:
                 return_value: dict = await _update_member(guild, member, session)
-                updated: bool = return_value['success']
+                member_update_msg = _build_update_summary(return_value)
 
                 if on_progress:
-                    await on_progress(len(success_to_update), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
+                    await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
-                if not updated:
-                    raise Exception(return_value['value'])
+                if not return_value['success']:
+                    raise Exception(f'❌ Update failed for {member.mention}. {return_value['value']}')
 
-                success_to_update.append(member.display_name)
+                player_update_summary_list.append(f'\n{member_update_msg}')
 
             except Exception as e:
-                failed_to_update.append(member.display_name)
-                log(guild, f"❌ [ERROR] Automatic update failed for: {member.display_name}, error: {e}")
+                log(guild, summary := f'{e}')
+                player_update_summary_list.append(f'\n{summary}')
+                failed_player_updates_summary_list.append(f'\n{summary}')
 
-    log(guild,
-        f"[FINISHED AUTOMATIC UPDATE] Updated {len(success_to_update)} member{'' if len(success_to_update) == 1 else 's'}.\
-        Failed with {len(failed_to_update)}member{'' if len(failed_to_update) == 1 else 's'}"
-    )
-
-    if failed_to_update:
-        return {'success': False, 'value': ', '.join(failed_to_update)}
-
-    return {'success': True, 'value': ', '.join(success_to_update)}
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
+    return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
     if not interval_hours:
@@ -620,19 +639,29 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             _loop.cancel()
             return
 
+        if not (channel := bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))):
+            log(guild, 'Channel is not set.')
+            return _loop
+
         return_value = await _run_guild_update(guild)
 
-        channel = bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))
-        if not channel:
-            log(guild, 'Channel is not set.')
-            return
+        if not return_value['value']:
+            log(guild, 'No updated members.')
+            return _loop
+
         try:
-            if return_value['success']:
-                log(f"✅ Automatic update complete. {return_value['value']}")
-            else:
-                log(f"⚠️ Automatic update finished with errors: {return_value['value']}")
+            # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
+            if failed_msg := return_value.get('failed_player_updates_summary_list'):
+                await channel.send(failed_msg)
+
+            return _loop
+
+            # dont display anything at this time.
+            log(guild, channel_msg := f"{return_value['value']}")
+            await channel.send(channel_msg)
+
         except Exception as e:
-            log(guild, f'Error at automatic loop: {e}')
+            log(guild, f'Error at automatic loop sending channel msg: {e}')
 
     return _loop
 
