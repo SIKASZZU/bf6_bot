@@ -119,7 +119,7 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
     server_data = data.get(str(guild.id))
 
     embed = discord.Embed(
-        title="📊 Linked accounts" if not member else f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}'s linked account",
+        title="📊 Linked accounts" if not member else f"{guild.get_member(int(member.id)).mention if guild.get_member(int(member.id)) else f"<left server> ({member.id})"}'s linked account",
         color=discord.Color.blue()
     )
 
@@ -132,13 +132,13 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
     for discord_id, entry in server_data.items():
         if member and discord_id == member.id:
             lines.append(
-                f"{entry.get('name', 'unknown')} {entry.get('career_rank', '')} {entry.get('rank_name', '')}"
+                f"{entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
             break
 
         elif not member:
             lines.append(
-                f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')} {entry.get('career_rank', '')} {entry.get('rank_name', '')}"
+                f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
 
     embed.description = "\n".join(lines)
@@ -255,17 +255,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
     await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
-
-def is_admin_or_has_role():
-    """Passes if the invoking user is a server administrator OR has the management role."""
-    def predicate(interaction: discord.Interaction) -> bool:
-        if interaction.user.guild_permissions.administrator:
-            return True
-
-        if role_id := load_config().get(str(interaction.guild.id), {}).get('permissioned_role_id'):
-            return discord.utils.get(interaction.user.roles, id=role_id) is not None
-
-    return app_commands.check(predicate)
 
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
 
