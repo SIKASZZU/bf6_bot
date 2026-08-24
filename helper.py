@@ -29,6 +29,11 @@ def save_data(data: dict):
     conn.commit()
     conn.close()
 
+class WrongChannelError(app_commands.CheckFailure):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(f"Command must be used in <#{channel_id}>")
+
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):
@@ -227,7 +232,9 @@ REQUEST_INTERVAL_SECONDS = 2
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    """Catches errors from slash commands (on_command_error above only fires for prefix commands)."""
+    if isinstance(error, WrongChannelError):
+        await send_interaction_message(interaction, f"❌ This command can only be used in <#{error.channel_id}>.", ephemeral=True)
+        return
 
     if isinstance(error, app_commands.CheckFailure):
         await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
@@ -246,18 +253,31 @@ def is_admin_or_has_role():
             return discord.utils.get(interaction.user.roles, id=role_id) is not None
 
     return app_commands.check(predicate)
-async def global_rate_limit(interaction: discord.Interaction):
+
+async def global_interaction_check(interaction: discord.Interaction) -> bool:
     global _last_command_time
-    now = time.monotonic() # lol wtf
-
+    now = time.monotonic()
     if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
-        # silently blocks the command from running
         return False
-
     _last_command_time = now
+
+    guild_config = load_config().get(str(interaction.guild.id), {})
+
+    # admin-or-role check
+    if not interaction.user.guild_permissions.administrator:
+        role_id = guild_config.get('permissioned_role_id')
+        if not (role_id and discord.utils.get(interaction.user.roles, id=role_id)):
+            raise app_commands.CheckFailure("Missing admin/role")
+
+    # report-channel restriction
+    command_name = interaction.command.name if interaction.command else None
+    channel_id = guild_config.get('channel_id')
+    if channel_id and command_name not in CHANNEL_CHECK_EXEMPT and interaction.channel.id != channel_id:
+        raise WrongChannelError(channel_id)
+
     return True
 
-bot.tree.interaction_check = global_rate_limit
+bot.tree.interaction_check = global_interaction_check
 
 @bot.event
 async def on_ready():
@@ -272,43 +292,6 @@ async def on_ready():
 
     # if not update_all_players.is_running():
     #     update_all_players.start()
-
-@bot.event
-async def on_command_error(ctx, error):
-    """
-    Catches errors from any command and prints a helpful usage message
-    to the channel instead of letting the traceback go unseen in the console.
-    """
-
-    if isinstance(error, (commands.MissingPermissions, commands.MissingRole, commands.MissingAnyRole)):
-        await ctx.send(f"❌ You don't have permission to use this command. Try again in {error.retry_after:.1f}s")
-        return
-
-    # arva ara kuidas muuta retry_after v22rtus
-    if isinstance(error, commands.CommandOnCooldown):
-        await ctx.send(f"⏳ Slow down! Try again in {error.retry_after:.1f}s.")
-        return
-
-    if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(
-            f"❌ Missing argument: `{error.param.name}`\n"
-            f"Usage: `!{ctx.command.qualified_name} {ctx.command.signature}`"
-        )
-        return
-
-    if isinstance(error, commands.BadArgument):
-        await ctx.send(
-            f"❌ Couldn't understand one of the arguments you gave.\n"
-            f"Usage: `!{ctx.command.qualified_name} {ctx.command.signature}`"
-        )
-        return
-
-    if isinstance(error, commands.CheckFailure):
-        await ctx.send("⏳ Bot is busy, try again in a moment.")
-        return
-
-    log(ctx.guild, f"Unhandled error in command '{ctx.command}': {error}")
-    await ctx.send(f"❌ An unexpected error occurred: {error}")
 
 @bot.event
 async def on_guild_join(guild):

@@ -40,8 +40,7 @@ DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 3
 
-# TODO: have it check by int somehow id // lol please fix this shit.
-PERMISSIONED_ROLE: str = 'Admin'
+CHANNEL_CHECK_EXEMPT = {'set-channel', 'set-authorised-role', 'show-authorised-role'}
 
 running_loops: dict[int, tasks.Loop] = {}
 
