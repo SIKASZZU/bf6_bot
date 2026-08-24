@@ -547,19 +547,19 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': fail_msg}
 
     if not (entry := get_player_entry(load_data(), guild.id, member.id)):
-        log(guild, fail_msg := f"❌ discord: {member.mention}. Not linked. Skipping.")
+        log(guild, fail_msg := f"❌ Not linked. Skipping.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
     if not (stats := await fetch_player_stats(guild, session, name, platform)):
-        log(guild, fail_msg := f"⚠️ Data fetch failed for discord: {member.mention}. If link for member is correct, do not stress. API failure.")
+        log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     rankValue, _ = get_level_and_rank(stats)
     if rankValue is None:
-        log(guild, fail_msg := f"[WARNING] Could not extract rank for discord: {member.mention}, link: {name}, {platform}.")
+        log(guild, fail_msg := f"[WARNING] Could not extract rank.")
         return return_msg | {'success': False, 'value': fail_msg}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
@@ -598,13 +598,14 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
     """
     check = check_guild_requirements(guild)
     if not check["ok"]:
-        fail_msg = "[ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
+        fail_msg = "❌ [ERROR STARTING AUTOMATIC UPDATE]: " + " | ".join(check["issues"])
         log(guild, fail_msg)
         return {'success': False, 'value': fail_msg}
 
     log(guild, f"[START AUTOMATIC UPDATE]")
 
-    updated_list: list = []
+    player_update_summary_list: list = []
+    failed_player_updates_summary_list: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
@@ -615,19 +616,20 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                 member_update_msg = _build_update_summary(return_value)
 
                 if on_progress:
-                    await on_progress(len(updated_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
+                    await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Error: Update fail for {member.mention}. {return_value['value']}')
+                    raise Exception(f'❌ Update failed for {member.mention}. {return_value['value']}')
 
-                updated_list.append(f'\n{member_update_msg}')
+                player_update_summary_list.append(f'\n{member_update_msg}')
 
             except Exception as e:
                 log(guild, summary := f'{e}')
-                updated_list.append(f'\n{summary}')
+                player_update_summary_list.append(f'\n{summary}')
+                failed_player_updates_summary_list.append(f'\n{summary}')
 
-    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(updated_list)} member{'' if len(updated_list) == 1 else 's'}.")
-    return {'success': True, 'value': ', '.join(updated_list)}
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
+    return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
     if not interval_hours:
@@ -659,11 +661,14 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             return _loop
 
         try:
-            channel_msg = f"⚠️ Automatic update finished with errors: {return_value['value']}"
-            if return_value['success']:
-                channel_msg = f"✅ Automatic update complete. Updated: {return_value['value']}"
+            # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
+            if failed_msg := return_value.get('failed_player_updates_summary_list'):
+                await channel.send(failed_msg)
 
-            log(guild, channel_msg)
+            return _loop
+
+            # dont display anything at this time.
+            log(guild, channel_msg := f"{return_value['value']}")
             await channel.send(channel_msg)
 
         except Exception as e:

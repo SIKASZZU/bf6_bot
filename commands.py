@@ -74,12 +74,8 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             last_edit = now
             await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
 
-
-        if not (return_value := await helper._run_guild_update(interaction.guild, on_progress=report_progress))['success']:
-            await interaction.edit_original_response(content=f"⚠️ Update failed for these specific players: {return_value['value']}.")
-            return
-
-        await interaction.edit_original_response(content=f"✅ Update successful. {return_value['value']}")
+        return_value = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
+        await interaction.edit_original_response(content=f"{return_value['value']}")
 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
