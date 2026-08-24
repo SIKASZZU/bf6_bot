@@ -130,7 +130,7 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
     lines = []
 
     for discord_id, entry in server_data.items():
-        if member and discord_id == member.id:
+        if member and discord_id == str(member.id):
             lines.append(
                 f"{entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
