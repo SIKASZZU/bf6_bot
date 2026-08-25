@@ -610,7 +610,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for {member.mention}'}
+    return return_msg | {'value': f'✅ Update successful for {member.mention}.'}
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
