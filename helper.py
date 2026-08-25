@@ -455,29 +455,6 @@ def get_rank_value_from_data(stats: dict) -> int:
 
     return None
 
-async def get_role(guild: discord.Guild, rank_name: str):
-    """Finds a role matching rank_name."""
-    if not rank_name:
-        log(guild, f"Failed to find rank_name: {rank_name}")
-        return None
-
-    if hasattr(rank_name, "name") and not isinstance(rank_name, str):
-        return rank_name
-
-    if isinstance(rank_name, int):
-        return guild.get_role(rank_name)
-
-    if isinstance(rank_name, str):
-        role = discord.utils.get(guild.roles, name=rank_name)
-    else:
-        role = None
-
-    if role is None:
-        log(guild, 'Missing role!')
-        # if channel:
-        #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
-    return role
-
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
     """
     Removes all obsolete rank roles from a member, keeping only their current rank role.
@@ -524,7 +501,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         log(guild, return_msg := 'Returning! rank_name is None.')
         return {"success": False, "value": return_msg}
 
-    if not (role := await get_role(guild, rank_name)):
+    if not (role := discord.utils.get(guild.roles, name=rank_name)):
         log(guild, return_msg := 'Returning! Role is None.')
         return {"success": False, "value": return_msg}
 
