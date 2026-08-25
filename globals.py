@@ -19,8 +19,8 @@ bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 bot.remove_command('help')
 
 API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
-def build_api_url(name: str, platform: str) -> str:
-    params = urlencode({'name': name, 'platform': platform})
+def build_api_url(name: str) -> str:
+    params = urlencode({'name': name, 'platform': DEFAULT_PLATFORM})
     return f"{API_BASE_URL}?{params}"
 
 file_folder = '/data'

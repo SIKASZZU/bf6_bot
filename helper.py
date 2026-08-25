@@ -373,41 +373,56 @@ async def on_member_remove(member: discord.Member):
         save_data(data)
         log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
 
-async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str):
-    """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
-    Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
-    permanent (bad name/platform) and fails immediately without retrying."""
+async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
+    """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
 
     last_error = None
+
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
-            API_URL = build_api_url(name, platform)
-            async with session.get(API_URL) as response:
+            api_url = build_api_url(name)
+            async with session.get(api_url) as response:
+                # 1. Handle HTTP non-200 responses
                 if response.status != 200:
-                    raise Exception(f'{response}')
+                    raise aiohttp.ClientResponseError(
+                        request_info=response.request_info,
+                        history=response.history,
+                        status=response.status,
+                        message=f"HTTP {response.status}",
+                    )
 
                 stats = await response.json()
 
+                # 2. Check for API payload errors
                 if isinstance(stats, dict) and "errors" in stats:
-                    raise Exception(f"{stats['errors']}")
+                    error_msg = str(stats["errors"]).lower()
+
+                    # Immediate exit for unretryable bad inputs
+                    if "not found" in error_msg:
+                        log(guild, f"INFO: Player not found. Skipping retries.")
+                        return None
+
+                    # Raise transient error to trigger the except/retry logic
+                    raise RuntimeError(f"API Error Payload: {stats['errors']}")
 
                 return stats
 
         except Exception as e:
             last_error = e
-            if attempt <= API_MAX_RETRIES:
-                # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
-                await asyncio.sleep(2 ** attempt)
-            continue
+            log(guild, f"WARNING: Attempt {attempt}/{API_MAX_RETRIES} for `{name}` failed: {e}")
 
-    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {last_error}")
+            if attempt < API_MAX_RETRIES:
+                await asyncio.sleep(2 ** attempt)
+
+    # All retries exhausted
+    log(guild, f"ERROR: All {API_MAX_RETRIES} attempts failed for `{name}`. Last error: {last_error}")
     return None
 
-def get_level_and_rank(stats: dict):
+def get_rank_value_from_data(stats: dict) -> int:
     """
-    Extracts rank/rankName from the bf6 profile response.
+    Extracts rank from the bf6 profile response.
 
-    The actual shape is:
+    Public profile:
     {
       "playerProfiles": [
         {
@@ -417,41 +432,43 @@ def get_level_and_rank(stats: dict):
         }
       ]
     }
-    So rank lives under playerProfiles[0]["playerCard"]["rank"], and
-    rankName is on playerProfiles[0] directly - neither is top-level.
+    Private profile:
+    {
+    "other": [
+        {
+        "playerProfiles": [
+            {
+            "rank": 134,
+            "badges": 81,
+            "rankName": "Second Lieutenant IV",
+            ...
+            }
+        ]
+        }
+    ]
+    }
     """
-    profiles = stats.get("playerProfiles") or []
-    if not profiles:
-        return None, None
 
-    profile = profiles[0]
-    rank = (profile.get("playerCard") or {}).get("rank")
-    rank_name = profile.get("rankName")
-
-    return rank, rank_name
-
-async def get_role(guild: discord.Guild, rank_name: str):
-    """Finds a role matching rank_name."""
-    if not rank_name:
-        log(guild, f"Failed to find rank_name: {rank_name}")
+    if not isinstance(stats, dict):
         return None
 
-    if hasattr(rank_name, "name") and not isinstance(rank_name, str):
-        return rank_name
+    profiles = stats.get("playerProfiles")
+    if not profiles and isinstance(stats.get("other"), list) and stats["other"]:
+        profiles = stats["other"][0].get("playerProfiles")
 
-    if isinstance(rank_name, int):
-        return guild.get_role(rank_name)
+    if not isinstance(profiles, list) or not profiles:
+        return None
 
-    if isinstance(rank_name, str):
-        role = discord.utils.get(guild.roles, name=rank_name)
-    else:
-        role = None
+    profile = profiles[0]
 
-    if role is None:
-        log(guild, 'Missing role!')
-        # if channel:
-        #     await channel.send(f"❌ Couldn't find a role based off rank name: {rank_name}. Search from !commands for role setup command.")
-    return role
+    player_card = profile.get("playerCard")
+    if isinstance(player_card, dict) and "rank" in player_card:
+        return player_card.get("rank")
+
+    if "rank" in profile:
+        return profile.get("rank")
+
+    return None
 
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
     """
@@ -472,18 +489,18 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
     ]
 
     if not roles_to_remove:
-        log(guild, msg := f"No obsolete rank roles to remove.")
-        return {"success": True, "value": msg, "rank_removed": None}
+        # log(guild, msg := f"No obsolete rank roles to remove.")
+        return {"success": True, "value": f"No obsolete rank roles to remove.", "rank_removed": None}
 
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
         removed_names = ", ".join(role.mention for role in roles_to_remove)
-        log(guild, msg := f"Removed roles: {removed_names}.")
-        return {"success": True, "value": msg, "rank_removed": removed_names}
+        # log(guild, msg := f"Removed roles: {removed_names}.")
+        return {"success": True, "value": f"Removed roles: {removed_names}.", "rank_removed": removed_names}
 
     except Exception as e:
-        log(guild, return_msg := f"Remove rank error: {e}")
-        return {"success": False, "value": return_msg}
+        # log(guild, return_msg := f"Remove rank error: {e}")
+        return {"success": False, "value": f"Remove rank error: {e}"}
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str) -> dict:
     """
@@ -499,7 +516,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         log(guild, return_msg := 'Returning! rank_name is None.')
         return {"success": False, "value": return_msg}
 
-    if not (role := await get_role(guild, rank_name)):
+    if not (role := discord.utils.get(guild.roles, name=rank_name)):
         log(guild, return_msg := 'Returning! Role is None.')
         return {"success": False, "value": return_msg}
 
@@ -545,24 +562,24 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     return_msg = {'success': True}
 
     if member.bot:
-        log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
-        return return_msg | {'success': False, 'value': fail_msg}
+        # log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
+        return return_msg | {'success': False, 'value': f"❌ Trying to update a bot. What the helly."}
 
     if not (entry := get_player_entry(load_data(), guild.id, member.id)):
-        log(guild, fail_msg := f"❌ Not linked. Skipping.")
-        return return_msg | {'success': False, 'value': fail_msg}
+        # log(guild, fail_msg := f"❌ Not linked. Skipping.")
+        return return_msg | {'success': False, 'value': f"❌ Not linked. Skipping."}
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    if not (stats := await fetch_player_stats(guild, session, name, platform)):
-        log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
-        return return_msg | {'success': False, 'value': fail_msg}
+    if not (stats := await fetch_player_stats(guild, session, name)):
+        # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
+        return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed. If link is correct, do not stress, API failure."}
 
-    rankValue, _ = get_level_and_rank(stats)
+    rankValue = get_rank_value_from_data(stats)
     if rankValue is None:
-        log(guild, fail_msg := f"[WARNING] Could not extract rank.")
-        return return_msg | {'success': False, 'value': fail_msg}
+        # log(guild, fail_msg := f"[WARNING] Could not extract rank.")
+        return return_msg | {'success': False, 'value': f"[WARNING] Could not extract rank."}
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
@@ -576,14 +593,16 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
     if not return_msg['assign_rank_role']['success']:
-        return return_msg | {'success': False, 'value': return_msg['assign_rank_role']['value'] }
+        # log(guild, msg := return_msg['assign_rank_role']['value'])
+        return return_msg | {'success': False, 'value': f'{return_msg['assign_rank_role']['value']}'}
 
     return_msg['remove_rank_role'] = await remove_rank_role(guild, member, concise_rank_name)
     if not return_msg['remove_rank_role']['success']:
-        return return_msg | {'success': False, 'value': return_msg['remove_rank_role']['value'] }
+        # log(guild, msg := return_msg['remove_rank_role']['value'])
+        return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
-    log(guild, success_msg := f'✅ Update successful for {member.mention}')
-    return return_msg | {'value': success_msg}
+    # log(guild, success_msg := )
+    return return_msg | {'value': f'✅ Update successful for {member.mention}.'}
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
@@ -628,7 +647,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for {member.mention}. {return_value['value']}')
+                    raise Exception(f'❌ Update failed for {member.mention}: {return_value['value']}.')
 
                 player_update_summary_list.append(f'\n{member_update_msg}')
 

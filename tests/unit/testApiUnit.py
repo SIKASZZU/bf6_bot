@@ -5,7 +5,7 @@ from globals import build_api_url
 class TestApiFunctionality(unittest.IsolatedAsyncioTestCase):
 
     def test_builds_correct_url(self):
-        url = build_api_url('sikzu', 'EA')
+        url = build_api_url('sikzu')
         self.assertIn('name=sikzu', url)
         self.assertIn('platform=EA', url)
 
