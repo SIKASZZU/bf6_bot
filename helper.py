@@ -373,7 +373,7 @@ async def on_member_remove(member: discord.Member):
         save_data(data)
         log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
 
-async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str):
+async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
     permanent (bad name/platform) and fails immediately without retrying."""
@@ -381,7 +381,7 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
     last_error = None
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
-            API_URL = build_api_url(name, platform)
+            API_URL = build_api_url(name)
             async with session.get(API_URL) as response:
                 if response.status != 200:
                     raise Exception(f'{response}')
@@ -400,7 +400,7 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
                 await asyncio.sleep(2 ** attempt)
             continue
 
-    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] ({name}, {platform}): {last_error}")
+    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
     return None
 
 def get_rank_value_from_data(stats: dict) -> int:
@@ -580,7 +580,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
 
-    if not (stats := await fetch_player_stats(guild, session, name, platform)):
+    if not (stats := await fetch_player_stats(guild, session, name)):
         # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
         return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed. If link is correct, do not stress, API failure."}
 
@@ -655,14 +655,14 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for {member.mention}. {return_value['value']}')
+                    raise Exception(f'❌ Update failed for {member.mention}: {return_value['value']}.')
 
-                player_update_summary_list.append(f'\n{member_update_msg}')
+                player_update_summary_list.append(f'{member_update_msg}')
 
             except Exception as e:
                 log(guild, summary := f'{e}')
-                player_update_summary_list.append(f'\n{summary}')
-                failed_player_updates_summary_list.append(f'\n{summary}')
+                player_update_summary_list.append(f'{summary}')
+                failed_player_updates_summary_list.append(f'{summary}')
 
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
     return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}

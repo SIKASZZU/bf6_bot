@@ -6,7 +6,7 @@ from globals import build_api_url
 class TestApiFunctionality(unittest.IsolatedAsyncioTestCase):
 
     async def test_api_success(self):
-        API_URL = build_api_url('sikzu', 'EA')
+        API_URL = build_api_url('sikzu')
 
         async with aiohttp.ClientSession() as session:
             async with session.get(API_URL) as response:
