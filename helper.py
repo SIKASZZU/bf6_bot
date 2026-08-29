@@ -58,6 +58,7 @@ def _get_guild_role_status(guild: discord.Guild) -> list:
 
     if missing_roles:
         role_issues.append(f'Missing roles {', '.join(missing_roles)}')
+
     return role_issues
 
 def check_guild_requirements(guild: discord.Guild) -> dict:
@@ -76,7 +77,7 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
     # 2. Hierarchy - bot's top role must sit above every rank role it assigns/removes.
     #    Checked per-role rather than just "highest rank role" so you get the exact
     #    offending role name instead of a vague pass/fail.
-    issues.append(_get_guild_role_status(guild))
+    issues.append('. '.join(_get_guild_role_status(guild)))
 
     # 3. Report channel - configured and still resolvable (not deleted).
     channel_id = load_config().get(str(guild.id), {}).get('channel_id')
@@ -597,7 +598,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for {member.mention}.'}
+    return return_msg | {'value': f'✅ Update successful for {member.name}.'}
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
