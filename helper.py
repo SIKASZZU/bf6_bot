@@ -43,6 +43,23 @@ def _get_tree_commands():
             return []
     return list(getattr(bot.tree, 'commands', []))
 
+def _get_guild_role_status(guild: discord.Guild) -> list:
+    missing_roles: list = []
+    role_issues: list = []
+
+    bot_top_position = guild.me.top_role.position
+    for rank_name in get_role_dict().keys():
+        role = discord.utils.get(guild.roles, name=rank_name)
+        if role is None:
+            missing_roles.append(rank_name)
+            continue
+        if role.position >= bot_top_position:
+            role_issues.append(f"Bot's role is positioned below '{rank_name}' - move the bot's role higher.")
+
+    if missing_roles:
+        role_issues.append(f'Missing roles {', '.join(missing_roles)}')
+    return role_issues
+
 def check_guild_requirements(guild: discord.Guild) -> dict:
     """Checks everything the bot needs to run an update in this guild.
 
@@ -59,14 +76,7 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
     # 2. Hierarchy - bot's top role must sit above every rank role it assigns/removes.
     #    Checked per-role rather than just "highest rank role" so you get the exact
     #    offending role name instead of a vague pass/fail.
-    bot_top_position = guild.me.top_role.position
-    for rank_name in get_role_dict().keys():
-        role = discord.utils.get(guild.roles, name=rank_name)
-        if role is None:
-            issues.append(f"Rank role '{rank_name}' doesn't exist in this server yet (run role setup).")
-            continue
-        if role.position >= bot_top_position:
-            issues.append(f"Bot's role is positioned below '{rank_name}' - move the bot's role higher.")
+    issues.append(_get_guild_role_status(guild))
 
     # 3. Report channel - configured and still resolvable (not deleted).
     channel_id = load_config().get(str(guild.id), {}).get('channel_id')
