@@ -77,7 +77,7 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
     # 2. Hierarchy - bot's top role must sit above every rank role it assigns/removes.
     #    Checked per-role rather than just "highest rank role" so you get the exact
     #    offending role name instead of a vague pass/fail.
-    issues.append('. '.join(_get_guild_role_status(guild)))
+    issues.extend(_get_guild_role_status(guild))
 
     # 3. Report channel - configured and still resolvable (not deleted).
     channel_id = load_config().get(str(guild.id), {}).get('channel_id')
