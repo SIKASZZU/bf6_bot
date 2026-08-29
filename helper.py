@@ -613,12 +613,23 @@ def _build_update_summary(return_value: dict) -> str:
 
     return ', '.join(parts)
 
-async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
+def _has_rank_change(return_value: dict) -> bool:
+    """True only if this member's update actually assigned or removed a rank
+    role. Used to filter out no-op successes from the automatic update report."""
+    assign = return_value.get('assign_rank_role') or {}
+    remove = return_value.get('remove_rank_role') or {}
+    return bool(assign.get('rank_added')) or bool(remove.get('rank_removed'))
+
+async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_changes: bool = False) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
 
     on_progress, if given, is an async callable(updated_count, total_linked) invoked after
     each successful member update - used for live progress reporting (e.g. editing a message).
+
+    only_report_changes, when True, drops successful-but-unchanged members from the returned
+    summary so callers only see members whose rank role was actually assigned/removed. Failed
+    updates are always included regardless of this flag. Used by the automatic loop.
     """
     check = check_guild_requirements(guild)
     if not check["ok"]:
@@ -645,7 +656,8 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None) -> dict:
                 if not return_value['success']:
                     raise Exception(f'❌ Update failed for {member.mention}: {return_value['value']}.')
 
-                player_update_summary_list.append(f'\n{member_update_msg}')
+                if not only_report_changes or _has_rank_change(return_value):
+                    player_update_summary_list.append(f'\n{member_update_msg}')
 
             except Exception as e:
                 log(guild, summary := f'{e}')
@@ -678,7 +690,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             log(guild, 'Channel is not set.')
             return _loop
 
-        return_value = await _run_guild_update(guild)
+        return_value = await _run_guild_update(guild, only_report_changes=True)
 
         if not return_value['value']:
             log(guild, 'No updated members.')
@@ -689,9 +701,6 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             if failed_msg := return_value.get('failed_player_updates_summary_list'):
                 await channel.send(failed_msg)
 
-            return _loop
-
-            # dont display anything at this time.
             log(guild, channel_msg := f"{return_value['value']}")
             await channel.send(channel_msg)
 
