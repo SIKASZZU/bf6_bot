@@ -374,48 +374,33 @@ async def on_member_remove(member: discord.Member):
         log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
-    """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None."""
+    """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
+    Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
+    permanent (bad name/platform) and fails immediately without retrying."""
 
     last_error = None
-
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
-            api_url = build_api_url(name)
-            async with session.get(api_url) as response:
-                # 1. Handle HTTP non-200 responses
+            API_URL = build_api_url(name)
+            async with session.get(API_URL) as response:
                 if response.status != 200:
-                    raise aiohttp.ClientResponseError(
-                        request_info=response.request_info,
-                        history=response.history,
-                        status=response.status,
-                        message=f"HTTP {response.status}",
-                    )
+                    raise Exception(f'{response}')
 
                 stats = await response.json()
 
-                # 2. Check for API payload errors
                 if isinstance(stats, dict) and "errors" in stats:
-                    error_msg = str(stats["errors"]).lower()
-
-                    # Immediate exit for unretryable bad inputs
-                    if "not found" in error_msg:
-                        log(guild, f"INFO: Player not found. Skipping retries.")
-                        return None
-
-                    # Raise transient error to trigger the except/retry logic
-                    raise RuntimeError(f"API Error Payload: {stats['errors']}")
+                    raise Exception(f"{stats['errors']}")
 
                 return stats
 
         except Exception as e:
             last_error = e
-            log(guild, f"WARNING: Attempt {attempt}/{API_MAX_RETRIES} for `{name}` failed: {e}")
-
-            if attempt < API_MAX_RETRIES:
+            if attempt <= API_MAX_RETRIES:
+                # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
+            continue
 
-    # All retries exhausted
-    log(guild, f"ERROR: All {API_MAX_RETRIES} attempts failed for `{name}`. Last error: {last_error}")
+    log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
     return None
 
 def get_rank_value_from_data(stats: dict) -> int:
