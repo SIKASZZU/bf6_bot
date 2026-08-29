@@ -44,22 +44,29 @@ def _get_tree_commands():
     return list(getattr(bot.tree, 'commands', []))
 
 def _get_guild_role_status(guild: discord.Guild) -> list:
-    missing_roles: list = []
-    role_issues: list = []
+    missing_roles: bool = False
+    position_below: bool = False
 
     bot_top_position = guild.me.top_role.position
     for rank_name in get_role_dict().keys():
         role = discord.utils.get(guild.roles, name=rank_name)
         if role is None:
-            missing_roles.append(rank_name)
+            missing_roles = True
             continue
+
         if role.position >= bot_top_position:
-            role_issues.append(f"Bot's role is positioned below '{rank_name}' - move the bot's role higher.")
+            position_below = True
 
+        if missing_roles and position_below:
+            # all boxes are checked
+            break
+
+    return_v: list = []
     if missing_roles:
-        role_issues.append(f'Missing roles {', '.join(missing_roles)}')
-
-    return role_issues
+        return_v.append(f'Missing role(s), run /create-roles.')
+    if position_below:
+        return_v.append(f"Bot's role is positioned below some role(s) - move the bot's role higher.")
+    return return_v
 
 def check_guild_requirements(guild: discord.Guild) -> dict:
     """Checks everything the bot needs to run an update in this guild.
