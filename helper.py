@@ -180,15 +180,15 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
     for discord_id, entry in server_data.items():
         if member and discord_id == str(member.id):
             lines.append(
-                f"{member.name}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"`{member.name}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
             break
 
         elif not member:
-            member_temp = guild.get_member(int(discord_id))
-            member_label = member_temp.name if member_temp else f"<left server> ({discord_id})"
+            member_guild = guild.get_member(int(discord_id))
+            member_label = member_guild.name if member_guild else f"<left server> ({discord_id})"
             lines.append(
-                f"{member_label}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"`{member_label}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
 
     if not server_data or not lines:
@@ -266,7 +266,7 @@ async def _warn_user_if_no_channel(interaction: discord.Interaction):
         # await interaction.user.send(embed=_build_no_channel_warning_embed())
         await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
     except Exception as e:
-        log(interaction.guild, f"[WARNING] Failed to DM {interaction.user.display_name} about missing channel config: {e}")
+        log(interaction.guild, f"[WARNING] Failed to DM `{interaction.user.name}` about missing channel config: {e}")
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
@@ -421,7 +421,7 @@ async def on_member_remove(member: discord.Member):
     if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
-        log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
+        log(member.guild, f"[LEFT] `{member.name}` ({str(member.id)}) left the guild - removed their link from data.")
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -531,7 +531,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
         removed_names = ", ".join(role.mention for role in roles_to_remove)
         # log(guild, msg := f"Removed roles: {removed_names}.")
-        return {"success": True, "value": f"Removed roles: {removed_names}.", "rank_removed": removed_names}
+        return {"success": True, "value": f"Removed roles: {removed_names}", "rank_removed": removed_names}
 
     except Exception as e:
         # log(guild, return_msg := f"Remove rank error: {e}")
@@ -563,7 +563,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return_msg = None
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {role.mention}.")
+            log(guild, return_msg := f"Assigned rank: {role.mention}")
 
         return {"success": True, "value": return_msg or f'Already has rank: {role.mention}', "rank_added": rank_name if return_msg else None }
 
@@ -637,7 +637,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for {member.name}.'}
+    return return_msg | {'value': f'✅ Update successful for `{member.name}`'}
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
@@ -676,11 +676,11 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
         log(guild, fail_msg)
         return {'success': False, 'value': fail_msg}
 
-    log(guild, f"[START AUTOMATIC UPDATE]")
-
     player_update_summary_list: list = []
     failed_player_updates_summary_list: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
+
+    log(guild, f"[START AUTOMATIC UPDATE] Total linked: {len(linked_member_ids)} member{'' if len(linked_member_ids)==1 else 's'}.")
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
@@ -693,14 +693,13 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for {member.mention}: {return_value['value']}.')
+                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
 
             except Exception as e:
                 log(guild, summary := f'{e}')
-                player_update_summary_list.append(f'\n{summary}')
                 failed_player_updates_summary_list.append(f'\n{summary}')
 
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
@@ -731,17 +730,21 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
         return_value = await _run_guild_update(guild, only_report_changes=True)
 
-        if not return_value['value']:
+        success_msg = return_value.get('value')
+        failed_msg = return_value.get('failed_player_updates_summary_list')
+
+        if not success_msg and not failed_msg:
             log(guild, 'No updated members.')
             return _loop
 
         try:
             # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
-            if failed_msg := return_value.get('failed_player_updates_summary_list'):
+            if failed_msg:
                 await channel.send(failed_msg)
 
-            log(guild, channel_msg := f"{return_value['value']}")
-            await channel.send(channel_msg)
+            if success_msg:
+                log(guild, channel_msg := f"{success_msg}")
+                await channel.send(channel_msg)
 
         except Exception as e:
             log(guild, f'Error at automatic loop sending channel msg: {e}')

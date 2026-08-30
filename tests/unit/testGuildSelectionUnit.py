@@ -20,7 +20,7 @@ class FakeGuild:
 class FakeMember:
     def __init__(self, member_id, name=None):
         self.id = int(member_id)
-        self.display_name = name or str(member_id)
+        self.name = name or str(member_id)
         self.bot = False
 
 
@@ -140,7 +140,7 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(update_member.await_count, 2)
         self.assertTrue(update_result["success"])
-        self.assertIn("boom", update_result["value"])
+        self.assertNotIn("boom", update_result["value"])
 
     # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
     #     guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
