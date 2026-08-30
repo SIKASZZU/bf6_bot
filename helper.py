@@ -186,7 +186,7 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
 
         elif not member:
             lines.append(
-                f"{guild.get_member(int(discord_id)).mention if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"{guild.get_member(int(discord_id)).name if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
 
     if not server_data or not lines:
