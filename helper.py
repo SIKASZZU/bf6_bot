@@ -179,14 +179,19 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
 
     for discord_id, entry in server_data.items():
         if member and discord_id == str(member.id):
+            member_label = resolved.mention if resolved else f"<left server> ({member.id})"
             lines.append(
-                f"{entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"{member_label}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
             break
 
         elif not member:
+            existing_member = guild.get_member(int(discord_id))
+            member_label = existing_member.mention if existing_member and hasattr(existing_member, 'mention') else (
+                existing_member.name if existing_member else f"<left server> ({discord_id})"
+            )
             lines.append(
-                f"{guild.get_member(int(discord_id)).name if guild.get_member(int(discord_id)) else f"<left server> ({discord_id})"}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"{member_label}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
 
     if not server_data or not lines:
