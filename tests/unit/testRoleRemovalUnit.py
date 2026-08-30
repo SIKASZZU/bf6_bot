@@ -34,7 +34,7 @@ class TestRoleRemoval(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(member.removed, [("Kapral", "Rank sync - removing obsolete roles")])
         self.assertEqual(result, {
             "success": True,
-            "value": "Removed roles: @Kapral.",
+            "value": "Removed roles: @Kapral",
             "rank_removed": "@Kapral",
         })
 
