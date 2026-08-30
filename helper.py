@@ -676,11 +676,11 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
         log(guild, fail_msg)
         return {'success': False, 'value': fail_msg}
 
-    log(guild, f"[START AUTOMATIC UPDATE]")
-
     player_update_summary_list: list = []
     failed_player_updates_summary_list: list = []
     linked_member_ids = list(load_data().get(str(guild.id)).keys())
+
+    log(guild, f"[START AUTOMATIC UPDATE] Total linked: {len(linked_member_ids)} member{'' if len(linked_member_ids)==1 else 's'}.")
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
             member = guild.get_member(int(member_id))
@@ -700,7 +700,6 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
 
             except Exception as e:
                 log(guild, summary := f'{e}')
-                player_update_summary_list.append(f'\n{summary}')
                 failed_player_updates_summary_list.append(f'\n{summary}')
 
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
@@ -729,19 +728,23 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             log(guild, 'Channel is not set.')
             return _loop
 
-        return_value = await _run_guild_update(guild, only_report_changes=True)
+        return_value = await _run_guild_update(guild)
 
-        if not return_value['value']:
+        success_msg = return_value.get('value')
+        failed_msg = return_value.get('failed_player_updates_summary_list')
+
+        if not success_msg and not failed_msg:
             log(guild, 'No updated members.')
             return _loop
 
         try:
             # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
-            if failed_msg := return_value.get('failed_player_updates_summary_list'):
+            if failed_msg:
                 await channel.send(failed_msg)
 
-            log(guild, channel_msg := f"{return_value['value']}")
-            await channel.send(channel_msg)
+            if success_msg:
+                log(guild, channel_msg := f"{success_msg}")
+                await channel.send(channel_msg)
 
         except Exception as e:
             log(guild, f'Error at automatic loop sending channel msg: {e}')

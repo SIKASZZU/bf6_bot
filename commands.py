@@ -74,8 +74,16 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
 
         return_value = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
-        log(interaction.guild, member_success := f'{return_value['value']}')
-        await interaction.edit_original_response(content=member_success)
+
+        summary_parts = []
+        if return_value.get('value'):
+            summary_parts.append(return_value['value'])
+        if return_value.get('failed_player_updates_summary_list'):
+            summary_parts.append(return_value['failed_player_updates_summary_list'])
+
+        combined = ', '.join(summary_parts) if summary_parts else 'No linked members to update.'
+        log(interaction.guild, combined)
+        await interaction.edit_original_response(content=combined)
 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
