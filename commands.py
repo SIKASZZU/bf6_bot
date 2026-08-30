@@ -32,9 +32,9 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     helper.save_data(data)
 
     if target.id == interaction.user.id:
-        await helper.send_interaction_message(interaction, msg := f"✅ Successfully linked your Discord account to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, msg := f"✅ Successfully linked You to `{name}` on platform `{platform}`!")
     else:
-        await helper.send_interaction_message(interaction, msg := f"✅ Linked {target.mention} to `{name}` on platform `{platform}`!")
+        await helper.send_interaction_message(interaction, msg := f"✅ Linked `{target}` to `{name}` on platform `{platform}`!")
 
     log(interaction.guild, msg)
 
@@ -45,7 +45,7 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
-    await helper.send_interaction_message(interaction, update_msg:=f'(Updating... {member.mention if member else ''})')
+    await helper.send_interaction_message(interaction, update_msg:=f'(Updating... `{member if member else ''}`)')
     log(interaction.guild, update_msg)
 
     target = member or interaction.user
@@ -304,7 +304,7 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
     if guild_key not in data or member_key not in data[guild_key]:
         message = discord.Embed(
             title="❌ Error",
-            description=f"{member.mention} is not linked to any account.",
+            description=f"`{member}` is not linked to any account.",
             color=discord.Color.red()
         )
         await helper.send_interaction_message(interaction, content=message)
@@ -323,7 +323,7 @@ async def unlink_member(interaction: discord.Interaction, member: discord.Member
 
     message = discord.Embed(
         title="✅ Account unlinked",
-        description=f"Unlinked {member.mention} from account `{account_name}`",
+        description=f"Unlinked `{member}` from account `{account_name}`",
         color=discord.Color.green()
     )
     await helper.send_interaction_message(interaction, content=message)

@@ -421,7 +421,7 @@ async def on_member_remove(member: discord.Member):
     if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
-        log(member.guild, f"[LEFT] {member.mention} ({str(member.id)}) left the guild - removed their link from data.")
+        log(member.guild, f"[LEFT] `{member.name}` ({str(member.id)}) left the guild - removed their link from data.")
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -693,7 +693,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for {member.mention}: {return_value['value']}.')
+                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}.')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
