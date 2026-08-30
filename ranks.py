@@ -34,10 +34,17 @@ async def create_roles(guild: discord.Guild):
     created = []
     skipped = []
     failed = []
+    cap_reached = False
 
     for rank_name in r_dict.keys():
         if rank_name in existing_role_names:
             skipped.append(rank_name)
+            continue
+
+        if cap_reached:
+            # Already know every further create_role call will fail identically -
+            # don't burn API calls/rate limit budget confirming that repeatedly.
+            failed.append(rank_name)
             continue
 
         try:
@@ -48,8 +55,16 @@ async def create_roles(guild: discord.Guild):
             )
             created.append(rank_name)
 
+        except discord.HTTPException as e:
+            if e.code == 30005:
+                cap_reached = True
+                log(guild, f'Server hit the 250-role cap ({len(guild.roles)} roles) - stopping role creation.')
+            else:
+                log(guild, fail_msg := f'Failed to create role. Error {e}')
+            failed.append(rank_name)
+
         except Exception as e:
             log(guild, fail_msg := f'Failed to create role. Error {e}')
             failed.append(rank_name)
 
-    return created, skipped, failed
+    return created, skipped, failed, cap_reached

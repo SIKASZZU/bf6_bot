@@ -81,7 +81,9 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         await interaction.edit_original_response(content=fail_msg)
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 async def setup_roles(interaction: discord.Interaction):
-    created, skipped, failed = await create_roles(interaction.guild)
+    await interaction.response.defer()
+
+    created, skipped, failed, cap_reached = await create_roles(interaction.guild)
 
     message = discord.Embed(
         title="⚙️ Role Creation",
@@ -95,12 +97,14 @@ async def setup_roles(interaction: discord.Interaction):
         helper._add_chunked_field(message, "✅ Created roles", created)
         helper._add_chunked_field(message, "✅ Already existed", skipped)
         if failed:
-            helper._add_chunked_field(
-                message,
-                "❌ Missing permissions",
-                failed,
-                suffix=f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._"
-            )
+            if cap_reached:
+                field_name = "❌ Role limit reached"
+                suffix = f"\n_This server has hit Discord's 250-role limit ({len(interaction.guild.roles)} roles). Remove unused roles to free up space, then run `{COMMAND_PREFIX}create-roles` again._"
+            else:
+                field_name = "❌ Missing permissions"
+                suffix = f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._"
+
+            helper._add_chunked_field(message, field_name, failed, suffix=suffix)
             message.color = discord.Color.orange()
 
     await helper.send_interaction_message(interaction, content=message)

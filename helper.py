@@ -122,7 +122,7 @@ def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len:
             chunks.append(suffix.lstrip('\n'))
 
     for i, chunk in enumerate(chunks):
-        field_name = name if i == 0 else f'{name} (cont.)'
+        field_name = name if i == 0 else f'\u200b'
         embed.add_field(name=field_name, value=chunk, inline=False)
 
 def _build_commands_message():
