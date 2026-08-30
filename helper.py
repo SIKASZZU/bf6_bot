@@ -728,7 +728,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
             log(guild, 'Channel is not set.')
             return _loop
 
-        return_value = await _run_guild_update(guild)
+        return_value = await _run_guild_update(guild, only_report_changes=True)
 
         success_msg = return_value.get('value')
         failed_msg = return_value.get('failed_player_updates_summary_list')
