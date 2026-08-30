@@ -95,6 +95,36 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
 
     return {"ok": not issues, "issues": issues}
 
+def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = ''):
+    """Adds `items` (joined with ', ') to embed as one or more fields, splitting
+    across multiple fields so no single field value exceeds Discord's 1024-char
+    limit. `suffix` (e.g. a note appended after the last chunk) is appended to
+    the final chunk only, and still respects the limit."""
+    if not items:
+        return
+
+    chunks = []
+    current = ''
+    for item in items:
+        piece = item if not current else f', {item}'
+        if len(current) + len(piece) > max_len:
+            chunks.append(current)
+            current = item
+        else:
+            current += piece
+    if current:
+        chunks.append(current)
+
+    if suffix:
+        if len(chunks[-1]) + len(suffix) <= max_len:
+            chunks[-1] += suffix
+        else:
+            chunks.append(suffix.lstrip('\n'))
+
+    for i, chunk in enumerate(chunks):
+        field_name = name if i == 0 else f'{name} (cont.)'
+        embed.add_field(name=field_name, value=chunk, inline=False)
+
 def _build_commands_message():
     embed = discord.Embed(
         title="📋 All commands",

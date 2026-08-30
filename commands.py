@@ -79,7 +79,6 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
         await interaction.edit_original_response(content=fail_msg)
-
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 async def setup_roles(interaction: discord.Interaction):
     created, skipped, failed = await create_roles(interaction.guild)
@@ -93,15 +92,14 @@ async def setup_roles(interaction: discord.Interaction):
         message.description = "❌ Something went wrong trying to create roles."
         message.color = discord.Color.red()
     else:
-        if created:
-            message.add_field(name="✅ Created roles", value=", ".join(created), inline=False)
-        if skipped:
-            message.add_field(name="✅ Already existed", value=", ".join(skipped), inline=False)
+        helper._add_chunked_field(message, "✅ Created roles", created)
+        helper._add_chunked_field(message, "✅ Already existed", skipped)
         if failed:
-            message.add_field(
-                name="❌ Missing permissions",
-                value=", ".join(failed) + f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._",
-                inline=False
+            helper._add_chunked_field(
+                message,
+                "❌ Missing permissions",
+                failed,
+                suffix=f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._"
             )
             message.color = discord.Color.orange()
 
