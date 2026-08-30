@@ -70,7 +70,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         message = helper._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
-        self.assertInEmbed('<@456>', message)
+        self.assertInEmbed('CoolPlayer', message)
         self.assertNotInEmbed('<left server>', message)
 
 if __name__ == '__main__':
