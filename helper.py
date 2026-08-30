@@ -180,15 +180,15 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
     for discord_id, entry in server_data.items():
         if member and discord_id == str(member.id):
             lines.append(
-                f"{member.name}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"`{member.name}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
             break
 
         elif not member:
-            member_temp = guild.get_member(int(discord_id))
-            member_label = member_temp.name if member_temp else f"<left server> ({discord_id})"
+            member_guild = guild.get_member(int(discord_id))
+            member_label = member_guild.name if member_guild else f"<left server> ({discord_id})"
             lines.append(
-                f"{member_label}: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"`{member_label}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
 
     if not server_data or not lines:
@@ -266,7 +266,7 @@ async def _warn_user_if_no_channel(interaction: discord.Interaction):
         # await interaction.user.send(embed=_build_no_channel_warning_embed())
         await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
     except Exception as e:
-        log(interaction.guild, f"[WARNING] Failed to DM {interaction.user.display_name} about missing channel config: {e}")
+        log(interaction.guild, f"[WARNING] Failed to DM `{interaction.user.name}` about missing channel config: {e}")
 
 async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
@@ -637,7 +637,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for {member.name}.'}
+    return return_msg | {'value': f'✅ Update successful for `{member.name}`.'}
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]

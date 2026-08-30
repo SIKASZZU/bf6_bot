@@ -12,7 +12,7 @@ class FakeMember:
     def __init__(self, roles):
         self.roles = roles
         self.removed = []
-        self.display_name = "TestUser"
+        self.name = "TestUser"
 
     async def remove_roles(self, role, reason):
         self.removed.append((role.name, reason))

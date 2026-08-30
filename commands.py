@@ -57,7 +57,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
                 return_value: dict = await helper._update_member(interaction.guild, target, session)
 
                 if not return_value['success']:
-                    raise Exception(f'Update fail for `{target.display_name}`. {return_value['value']}')
+                    raise Exception(f'Update fail for `{target.name}`. {return_value['value']}')
 
                 await interaction.edit_original_response(content = helper._build_update_summary(return_value))
             return
@@ -79,6 +79,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
         await interaction.edit_original_response(content=fail_msg)
+
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 async def setup_roles(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -338,7 +339,7 @@ async def assign_management_role(interaction: discord.Interaction, role: discord
     config.setdefault(str(interaction.guild.id))['permissioned_role_id'] = role.id
     save_config(config)
 
-    log(interaction.guild, f"Management role set to '{role.name}' ({role.id}) by {interaction.user.display_name}")
+    log(interaction.guild, f"Management role set to '{role.name}' ({role.id}) by {interaction.user.name}")
 
     message = discord.Embed(
         title="✅ Management Role Set",

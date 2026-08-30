@@ -12,10 +12,9 @@ class FakeGuild:
     def get_member(self, member_id):
         return None  # simulate no cached members for this test
 class FakeMember:
-    def __init__(self, id, display_name):
+    def __init__(self, id, name):
         self.id = id
-        self.display_name = display_name
-        self.name = display_name
+        self.name = name
         self.mention = f"<@{id}>"
 
 
@@ -64,7 +63,7 @@ class TestCommandHelpMessages(unittest.TestCase):
 
     def test_build_linked_message_uses_member_mention_when_member_found(self):
         data = {'123': {'456': {'name': 'alice', 'platform': 'EA'}}}
-        member = FakeMember(id=456, display_name='CoolPlayer')
+        member = FakeMember(id=456, name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
         message = helper._build_linked_message(fake_guild, data)

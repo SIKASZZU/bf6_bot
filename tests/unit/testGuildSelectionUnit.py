@@ -20,7 +20,7 @@ class FakeGuild:
 class FakeMember:
     def __init__(self, member_id, name=None):
         self.id = int(member_id)
-        self.display_name = name or str(member_id)
+        self.name = name or str(member_id)
         self.bot = False
 
 
