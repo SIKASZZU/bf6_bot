@@ -24,6 +24,10 @@ def get_role_dict():
 
 def getRankNameFromCareerRank(userCareerRank: int) -> str:
     for rank_name, (min_val, max_val) in r_dict.items():
+
+        if min_val == max_val and max_val <= userCareerRank:
+            return rank_name
+
         if min_val <= userCareerRank <= max_val:
             return rank_name
     return None
