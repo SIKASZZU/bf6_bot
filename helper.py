@@ -531,7 +531,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
         removed_names = ", ".join(role.mention for role in roles_to_remove)
         # log(guild, msg := f"Removed roles: {removed_names}.")
-        return {"success": True, "value": f"Removed roles: {removed_names}.", "rank_removed": removed_names}
+        return {"success": True, "value": f"Removed roles: {removed_names}", "rank_removed": removed_names}
 
     except Exception as e:
         # log(guild, return_msg := f"Remove rank error: {e}")
@@ -563,7 +563,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return_msg = None
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {role.mention}.")
+            log(guild, return_msg := f"Assigned rank: {role.mention}")
 
         return {"success": True, "value": return_msg or f'Already has rank: {role.mention}', "rank_added": rank_name if return_msg else None }
 
@@ -637,7 +637,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for `{member.name}`.'}
+    return return_msg | {'value': f'✅ Update successful for `{member.name}`'}
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
@@ -693,7 +693,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}.')
+                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
