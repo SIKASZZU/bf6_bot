@@ -79,10 +79,11 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
         await interaction.edit_original_response(content=fail_msg)
-
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 async def setup_roles(interaction: discord.Interaction):
-    created, skipped, failed = await create_roles(interaction.guild)
+    await interaction.response.defer()
+
+    created, skipped, failed, cap_reached = await create_roles(interaction.guild)
 
     message = discord.Embed(
         title="⚙️ Role Creation",
@@ -93,16 +94,17 @@ async def setup_roles(interaction: discord.Interaction):
         message.description = "❌ Something went wrong trying to create roles."
         message.color = discord.Color.red()
     else:
-        if created:
-            message.add_field(name="✅ Created roles", value=", ".join(created), inline=False)
-        if skipped:
-            message.add_field(name="✅ Already existed", value=", ".join(skipped), inline=False)
+        helper._add_chunked_field(message, "✅ Created roles", created)
+        helper._add_chunked_field(message, "✅ Already existed", skipped)
         if failed:
-            message.add_field(
-                name="❌ Missing permissions",
-                value=", ".join(failed) + f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._",
-                inline=False
-            )
+            if cap_reached:
+                field_name = "❌ Role limit reached"
+                suffix = f"\n_This server has hit Discord's 250-role limit ({len(interaction.guild.roles)} roles). Remove unused roles to free up space, then run `{COMMAND_PREFIX}create-roles` again._"
+            else:
+                field_name = "❌ Missing permissions"
+                suffix = f"\n_Move the bot's role above these ranks (or grant Manage Roles), then run `{COMMAND_PREFIX}create-roles` again._"
+
+            helper._add_chunked_field(message, field_name, failed, suffix=suffix)
             message.color = discord.Color.orange()
 
     await helper.send_interaction_message(interaction, content=message)

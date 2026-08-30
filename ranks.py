@@ -1,31 +1,28 @@
 import discord
 from globals import log
+from english_ranks import EN_RANK_TIERS
+from estonian_ranks import EN_TO_ET
 
-# have this shit in desecending order meaning highest list value is the first entry in dict etc
-# else removing role breaks
-# i WILL make tests for it before i enter a grave
-r_dict = {
-    'Vanemveteran': [3000, 5000],
-    'Veteran': [500, 2999],
-    'Kindral': [450, 499],
-    'Brigadir': [400, 449],
-    'Kolonel': [350, 399],
-    'Kolonelleitnant': [300, 349],
-    'Major': [250, 299],
-    'Kapten': [200, 249],
-    'Vanemleitnant': [150, 199],
-    'Nooremleitnant': [100, 149],
-    'Voliohvitser': [50, 99],
-    'Seersantmajor': [45, 49],
-    'Seersant': [25, 44],
-    'Kapral': [5, 24],
-    'Reamees': [1, 4],
-}
+
+def _build_r_dict() -> dict:
+
+    r_dict = {}
+    for base_name, tiers in EN_RANK_TIERS.items():
+        et_base = EN_TO_ET[base_name]
+        for suffix, bounds in tiers:
+            role_name = f"{et_base} {suffix}".strip() if suffix else et_base
+            r_dict[role_name] = bounds
+    return r_dict
+
+
+r_dict = _build_r_dict()
+
 
 def get_role_dict():
     return r_dict
 
-def getRankNameFromCareerRank(userCareerRank : int) -> str:
+
+def getRankNameFromCareerRank(userCareerRank: int) -> str:
     for rank_name, (min_val, max_val) in r_dict.items():
         if min_val <= userCareerRank <= max_val:
             return rank_name
@@ -37,10 +34,17 @@ async def create_roles(guild: discord.Guild):
     created = []
     skipped = []
     failed = []
+    cap_reached = False
 
     for rank_name in r_dict.keys():
         if rank_name in existing_role_names:
             skipped.append(rank_name)
+            continue
+
+        if cap_reached:
+            # Already know every further create_role call will fail identically -
+            # don't burn API calls/rate limit budget confirming that repeatedly.
+            failed.append(rank_name)
             continue
 
         try:
@@ -51,8 +55,16 @@ async def create_roles(guild: discord.Guild):
             )
             created.append(rank_name)
 
+        except discord.HTTPException as e:
+            if e.code == 30005:
+                cap_reached = True
+                log(guild, f'Server hit the 250-role cap ({len(guild.roles)} roles) - stopping role creation.')
+            else:
+                log(guild, fail_msg := f'Failed to create role. Error {e}')
+            failed.append(rank_name)
+
         except Exception as e:
             log(guild, fail_msg := f'Failed to create role. Error {e}')
             failed.append(rank_name)
 
-    return created, skipped, failed
+    return created, skipped, failed, cap_reached
