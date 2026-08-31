@@ -1,6 +1,6 @@
 import unittest
 
-import helper
+import src.helper.helper as helper
 
 
 class FakeResponse:

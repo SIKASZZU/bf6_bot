@@ -1,7 +1,8 @@
 import unittest
 import discord
-from commands import *
-import helper
+from src.bot_interaction.commands import *
+import src.helper.helper as helper
+from src.helper.message_builder import _build_commands_message, _build_linked_message
 
 
 class FakeGuild:
@@ -38,14 +39,14 @@ class TestCommandHelpMessages(unittest.TestCase):
         self.assertNotIn(check_for, embed_dict_str, f"'{check_for}' was not found anywhere in the Embed.")
 
     def test_build_commands_message_includes_slash_commands(self):
-        message = helper._build_commands_message()
+        message = _build_commands_message()
 
         self.assertInEmbed('/commands', message)
         self.assertInEmbed('/link', message)
         self.assertInEmbed('/update', message)
 
     def test_build_commands_message_excludes_default_help_command(self):
-        message = helper._build_commands_message()
+        message = _build_commands_message()
         self.assertNotInEmbed('!help', message)
 
     def test_build_linked_message_includes_linked_accounts(self):
@@ -56,7 +57,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         }
 
         fake_guild = FakeGuild(id=123)
-        message = helper._build_linked_message(fake_guild, data)
+        message = _build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('456', message)
@@ -66,7 +67,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         member = FakeMember(id=456, name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
-        message = helper._build_linked_message(fake_guild, data)
+        message = _build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('CoolPlayer', message)

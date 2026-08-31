@@ -5,9 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv('secrets.env')
 
-from globals import bot, DEV_MODE
-from commands import *
-
+from src.globals import bot, DEV_MODE
+from src.bot_interaction.commands import *
 
 token = os.getenv("DISCORD_TOKEN") if not DEV_MODE else os.getenv("DISCORD_TOKEN_DEV")
 

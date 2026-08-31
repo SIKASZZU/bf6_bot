@@ -1,7 +1,7 @@
 import unittest
 import aiohttp
 
-from globals import build_api_url
+from src.helper.helper import build_api_url
 
 class TestApiFunctionality(unittest.IsolatedAsyncioTestCase):
 

@@ -1,10 +1,13 @@
 from discord import app_commands
 import aiohttp
 import time
+import discord
 
-from globals import *
-import helper
-from ranks import create_roles
+from src.globals import *
+from src.helper import helper
+from src.helper.helper import log
+from src.ranks.ranks import create_roles
+from src.data.config import load_config, save_config
 
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')

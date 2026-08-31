@@ -1,6 +1,6 @@
 import unittest
 
-from helper import remove_rank_role
+from src.ranks.ranks import remove_rank_role
 
 
 class FakeRole:

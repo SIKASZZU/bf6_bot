@@ -2,9 +2,6 @@
 *.env
 *.pyc
 
-data/
-
 venv/
 __pycache__/
-
-todo.md
+test_output.txt
