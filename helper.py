@@ -254,9 +254,9 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
         if member and discord_id == str(member.id):
             lines.append(
                 f"**`{member.name}`**\n"
-                f"↳ **EA:** `{entry.get('name', '<unknown>')}`\n"
-                f"↳ **Level:** `{entry.get('career_rank', '<Missing level>')}`\n"
-                f"↳ **Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
+                f"**EA:** `{entry.get('name', '<unknown>')}` · "
+                f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
+                f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
             )
             break
 
