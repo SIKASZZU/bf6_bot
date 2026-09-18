@@ -806,7 +806,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}')
+                    raise Exception(f'❌ Update failed for `{member if member else member_id}`: {return_value['value']}')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
