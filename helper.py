@@ -139,6 +139,12 @@ class EmbedPager(discord.ui.View):
         if getattr(self, "message", None):
             await self.message.edit(view=self)
 
+async def _send_chunked(channel, text: str, limit: int = 1900):
+    lines = [l for l in text.split('\n') if l.strip()]
+    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
+        for i in range(0, len(chunk), limit):
+            await channel.send(chunk[i:i + limit])
+
 def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = '', sep: str = ', '):
     if not items:
         return
@@ -700,6 +706,9 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return_msg = {'success': True}
 
+    if not member:
+        return {'success': False, 'value': f"❌ Not a member: `{member}`"}
+
     if member.bot:
         # log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
         return return_msg | {'success': False, 'value': f"❌ Trying to update a bot. What the helly."}
@@ -844,11 +853,12 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         try:
             # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
             if failed_msg:
-                await channel.send(failed_msg)
+                log(guild, failed_msg)
+                await _send_chunked(channel, failed_msg)
 
             if success_msg:
                 log(guild, channel_msg := f"{success_msg}")
-                await channel.send(channel_msg)
+                await _send_chunked(channel, channel_msg)
 
         except Exception as e:
             log(guild, f'Error at automatic loop sending channel msg: {e}')
