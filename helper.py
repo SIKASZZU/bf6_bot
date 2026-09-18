@@ -164,38 +164,73 @@ def _build_commands_message():
 
     return embed
 
-def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
+def _build_linked_message(
+    guild: discord.Guild,
+    data: dict,
+    member: discord.Member = None
+) -> discord.Embed:
+
     server_data = data.get(str(guild.id))
 
     resolved = guild.get_member(int(member.id)) if member else None
-    member_name = resolved.name if resolved else (f"<left server> ({member.id})" if member else None)
+    member_name = (
+        resolved.name
+        if resolved
+        else (f"<left server> ({member.id})" if member else None)
+    )
 
     embed = discord.Embed(
         title="📊 Linked accounts" if not member else f"{member_name}'s linked account",
         color=discord.Color.blue()
     )
 
+    if not server_data:
+        embed.description = (
+            "No linked accounts found for this server in the database."
+            if not member
+            else "No link"
+        )
+        return embed
+
     lines = []
 
     for discord_id, entry in server_data.items():
+
         if member and discord_id == str(member.id):
             lines.append(
-                f"`{member.name}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"**`{member.name}`**\n"
+                f"↳ **EA:** `{entry.get('name', '<unknown>')}`\n"
+                f"↳ **Level:** `{entry.get('career_rank', '<Missing level>')}`\n"
+                f"↳ **Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
             )
             break
 
         elif not member:
             member_guild = guild.get_member(int(discord_id))
-            member_label = member_guild.name if member_guild else f"<left server> ({discord_id})"
-            lines.append(
-                f"`{member_label}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+            member_label = (
+                member_guild.name
+                if member_guild
+                else f"<left server> ({discord_id})"
             )
 
-    if not server_data or not lines:
-        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
+            lines.append(
+                f"**`{member_label}`**\n"
+                f"↳ **EA:** `{entry.get('name', 'unknown')}`\n"
+                f"↳ **Level:** `{entry.get('career_rank', '<Missing level>')}`\n"
+                f"↳ **Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
+            )
+
+    if not lines:
+        embed.description = (
+            "No linked accounts found for this server in the database."
+            if not member
+            else "No link"
+        )
         return embed
 
-    embed.description = "\n".join(lines)
+    # Empty line between accounts
+    embed.description = "\n\n".join(lines)
+
     return embed
 
 def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
