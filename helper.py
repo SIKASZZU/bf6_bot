@@ -240,7 +240,7 @@ def _build_linked_message(
     )
 
     embed = discord.Embed(
-        title="📊 Linked accounts" if not member else f"{member_name}'s linked account",
+        title="📊 Linked accounts" if not member else f"**`{member_name}`** linked account",
         color=discord.Color.blue()
     )
 
@@ -262,7 +262,6 @@ def _build_linked_message(
 
         if member and discord_id == str(member.id):
             lines.append(
-                f"**`{member.name}`**\n"
                 f"**EA:** `{entry.get('name', '<unknown>')}` · "
                 f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
                 f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
@@ -278,7 +277,7 @@ def _build_linked_message(
             )
 
             lines.append(
-                f"**`{member_label}`**\n"
+                f"**`{member_label}`** | "
                 f"**EA:** `{entry.get('name', '<unknown>')}` · "
                 f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
                 f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
