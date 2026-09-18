@@ -95,6 +95,66 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
 
     return {"ok": not issues, "issues": issues}
 
+def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
+    chunks, current = [], ''
+    for item in items:
+        piece = item if not current else f'{sep}{item}'
+        if current and len(current) + len(piece) > max_len:
+            chunks.append(current)
+            current = item
+        else:
+            current += piece
+    if current:
+        chunks.append(current)
+    return chunks
+
+def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n\n") -> list[discord.Embed]:
+    pages = _chunk_items(lines, max_len=4000, sep=sep)
+    embeds = []
+    for i, page in enumerate(pages, 1):
+        e = discord.Embed(title=title, description=page, color=color)
+        if len(pages) > 1:
+            e.set_footer(text=f"Page {i}/{len(pages)} • {len(lines)} total")
+        embeds.append(e)
+    return embeds
+
+class EmbedPager(discord.ui.View):
+    def __init__(self, embeds: list[discord.Embed]):
+        super().__init__(timeout=120)
+        self.embeds, self.i = embeds, 0
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i - 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i + 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if getattr(self, "message", None):
+            await self.message.edit(view=self)
+
+def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = '', sep: str = ', '):
+    if not items:
+        return
+
+    chunks = _chunk_items(items, max_len=max_len, sep=sep)
+
+    if suffix:
+        if len(chunks[-1]) + len(suffix) <= max_len:
+            chunks[-1] += suffix
+        else:
+            chunks.append(suffix.lstrip('\n'))
+
+    for i, chunk in enumerate(chunks):
+        embed.add_field(name=name if i == 0 else '\u200b', value=chunk, inline=False)
+
+#depricate this
 def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = ''):
     """Adds `items` (joined with ', ') to embed as one or more fields, splitting
     across multiple fields so no single field value exceeds Discord's 1024-char
@@ -164,12 +224,7 @@ def _build_commands_message():
 
     return embed
 
-def _build_linked_message(
-    guild: discord.Guild,
-    data: dict,
-    member: discord.Member = None
-) -> discord.Embed:
-
+def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> list[discord.Embed]:
     server_data = data.get(str(guild.id))
 
     resolved = guild.get_member(int(member.id)) if member else None
@@ -190,7 +245,7 @@ def _build_linked_message(
             if not member
             else "No link"
         )
-        return embed
+        return [embed]
 
     lines = []
 
@@ -226,12 +281,11 @@ def _build_linked_message(
             if not member
             else "No link"
         )
-        return embed
+        return [embed]
 
     # Empty line between accounts
-    embed.description = "\n\n".join(lines)
-
-    return embed
+    # embed.description = "\n\n".join(lines)
+    return _paginate_lines(embed.title, lines, embed.color)
 
 def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))

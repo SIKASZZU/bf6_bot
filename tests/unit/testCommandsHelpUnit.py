@@ -26,16 +26,27 @@ class FakeGuildWithMember(FakeGuild):
     def get_member(self, member_id):
         return self._member if member_id == self._member.id else None
 
-class TestCommandHelpMessages(unittest.TestCase):
-    def assertInEmbed(self, check_for: str, embed: discord.Embed):
-        """Custom assertion to check if check_for exists anywhere in an embed."""
-        embed_dict_str = str(embed.to_dict())
-        self.assertIn(check_for, embed_dict_str, f"'{check_for}' was not found anywhere in the Embed.")
+def _embed_text(embeds) -> str:
+    """Flattens one Embed or a list of Embeds into searchable plain text."""
+    if isinstance(embeds, discord.Embed):
+        embeds = [embeds]
 
-    def assertNotInEmbed(self, check_for: str, embed: discord.Embed):
-        """Custom assertion to check if check_for exists anywhere in an embed."""
-        embed_dict_str = str(embed.to_dict())
-        self.assertNotIn(check_for, embed_dict_str, f"'{check_for}' was not found anywhere in the Embed.")
+    parts = []
+    for e in embeds:
+        parts += [e.title or "", e.description or ""]
+        for f in e.fields:
+            parts += [f.name or "", f.value or ""]
+        if e.footer.text:
+            parts.append(e.footer.text)
+    return "\n".join(parts)
+
+class TestCommandHelpMessages(unittest.TestCase):
+    def assertInEmbed(self, check_for: str, embeds):
+        """Asserts check_for appears anywhere in an Embed or list of Embeds."""
+        self.assertIn(check_for, _embed_text(embeds), f"'{check_for}' was not found in the embed(s).")
+
+    def assertNotInEmbed(self, check_for: str, embeds):
+        self.assertNotIn(check_for, _embed_text(embeds), f"'{check_for}' was unexpectedly found in the embed(s).")
 
     def test_build_commands_message_includes_slash_commands(self):
         message = helper._build_commands_message()
