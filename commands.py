@@ -83,11 +83,16 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
         combined = ', '.join(summary_parts) if summary_parts else 'No linked members to update.'
         log(interaction.guild, combined)
-        await interaction.edit_original_response(content=combined)
+
+        pages = helper._split_message(combined) or ['No linked members to update.']
+        await interaction.edit_original_response(content=pages[0])
+
+        for page in pages[1:]:
+            await interaction.followup.send(page)
 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
-        await interaction.edit_original_response(content=fail_msg)
+        await interaction.edit_original_response(content=fail_msg[:2000])
 
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 async def setup_roles(interaction: discord.Interaction):
@@ -183,7 +188,10 @@ async def display_commands(interaction: discord.Interaction):
     member='Discord member',
 )
 async def display_links(interaction: discord.Interaction, member: discord.Member = None):
-    await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data(), member))
+    embeds = helper._build_linked_message(interaction.guild, helper.load_data(), member)
+    kwargs = {"view": helper.EmbedPager(embeds)} if len(embeds) > 1 else {}
+    await helper.send_interaction_message(interaction, embeds[0], **kwargs)
+    # await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data(), member))
 
 @bot.tree.command(name='unlinked', description=f'Have all the unlinked members be displayed.')
 async def display_unlinks(interaction: discord.Interaction):

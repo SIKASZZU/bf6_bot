@@ -95,6 +95,80 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
 
     return {"ok": not issues, "issues": issues}
 
+def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
+    chunks, current = [], ''
+    for item in items:
+        piece = item if not current else f'{sep}{item}'
+        if current and len(current) + len(piece) > max_len:
+            chunks.append(current)
+            current = item
+        else:
+            current += piece
+    if current:
+        chunks.append(current)
+    return chunks
+
+def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n\n") -> list[discord.Embed]:
+    pages = _chunk_items(lines, max_len=4000, sep=sep)
+    embeds = []
+    for i, page in enumerate(pages, 1):
+        e = discord.Embed(title=title, description=page, color=color)
+        if len(pages) > 1:
+            e.set_footer(text=f"Page {i}/{len(pages)} • {len(lines)} total")
+        embeds.append(e)
+    return embeds
+
+class EmbedPager(discord.ui.View):
+    def __init__(self, embeds: list[discord.Embed]):
+        super().__init__(timeout=120)
+        self.embeds, self.i = embeds, 0
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i - 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i + 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if getattr(self, "message", None):
+            await self.message.edit(view=self)
+
+def _split_message(text: str, limit: int = 1900) -> list[str]:
+    """Splits text into <=limit chunks on line boundaries (hard-slices any single oversize line)."""
+    lines = [l.rstrip(', ') for l in text.split('\n') if l.strip()]
+    pages = []
+    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
+        pages.extend(chunk[i:i + limit] for i in range(0, len(chunk), limit))
+    return pages
+
+async def _send_chunked(channel, text: str, limit: int = 1900):
+    lines = [l for l in text.split('\n') if l.strip()]
+    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
+        for i in range(0, len(chunk), limit):
+            await channel.send(chunk[i:i + limit])
+
+def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = '', sep: str = ', '):
+    if not items:
+        return
+
+    chunks = _chunk_items(items, max_len=max_len, sep=sep)
+
+    if suffix:
+        if len(chunks[-1]) + len(suffix) <= max_len:
+            chunks[-1] += suffix
+        else:
+            chunks.append(suffix.lstrip('\n'))
+
+    for i, chunk in enumerate(chunks):
+        embed.add_field(name=name if i == 0 else '\u200b', value=chunk, inline=False)
+
+#depricate this
 def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = ''):
     """Adds `items` (joined with ', ') to embed as one or more fields, splitting
     across multiple fields so no single field value exceeds Discord's 1024-char
@@ -164,39 +238,67 @@ def _build_commands_message():
 
     return embed
 
-def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
+def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> list[discord.Embed]:
     server_data = data.get(str(guild.id))
 
     resolved = guild.get_member(int(member.id)) if member else None
-    member_name = resolved.name if resolved else (f"<left server> ({member.id})" if member else None)
+    member_name = (
+        resolved.name
+        if resolved
+        else (f"<left server> ({member.id})" if member else None)
+    )
 
     embed = discord.Embed(
-        title="📊 Linked accounts" if not member else f"{member_name}'s linked account",
+        title="📊 Linked accounts" if not member else f"**`{member_name}`** linked account",
         color=discord.Color.blue()
     )
+
+    if not server_data:
+        embed.description = (
+            "No linked accounts found for this server in the database."
+            if not member
+            else "No link"
+        )
+        return [embed]
 
     lines = []
 
     for discord_id, entry in server_data.items():
+
         if member and discord_id == str(member.id):
             lines.append(
-                f"`{member.name}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+                f"**EA:** `{entry.get('name', '<unknown>')}` · "
+                f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
+                f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
             )
             break
 
         elif not member:
             member_guild = guild.get_member(int(discord_id))
-            member_label = member_guild.name if member_guild else f"<left server> ({discord_id})"
-            lines.append(
-                f"`{member_label}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
+            member_label = (
+                member_guild.name
+                if member_guild
+                else f"<left server> ({discord_id})"
             )
 
-    if not server_data or not lines:
-        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
-        return embed
+            lines.append(
+                f"**`{member_label}`** | "
+                f"**EA:** `{entry.get('name', '<unknown>')}` · "
+                f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
+                f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
+            )
 
-    embed.description = "\n".join(lines)
-    return embed
+    if not lines:
+        embed.description = (
+            "No linked accounts found for this server in the database."
+            if not member
+            else "No link"
+        )
+        return [embed]
+
+    # Empty line between accounts
+    # embed.description = "\n\n".join(lines)
+    return _paginate_lines(embed.title, lines, embed.color)
 
 def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
     server_data = data.get(str(guild.id))
@@ -433,8 +535,22 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
         try:
             API_URL = build_api_url(name)
             async with session.get(API_URL) as response:
+                body = await response.text()
+                log(
+                    guild,
+                    f"[Attempt {attempt}/{API_MAX_RETRIES}] "
+                    f"{name}: "
+                    f"HTTP {response.status} | "
+                    f"Body={body!r} | "
+                    f"Headers={dict(response.headers)}"
+                )
+
                 if response.status != 200:
-                    raise Exception(f'{response}')
+                    raise Exception(
+                        f"HTTP {response.status} | "
+                        f"URL: {response.url} | "
+                        f"Body: {body}"
+                    )
 
                 stats = await response.json()
 
@@ -445,9 +561,11 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
 
         except Exception as e:
             last_error = e
-            if attempt <= API_MAX_RETRIES:
+
+            if attempt < API_MAX_RETRIES:
                 # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
+
             continue
 
     log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
@@ -596,6 +714,9 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return_msg = {'success': True}
 
+    if not member:
+        return {'success': False, 'value': f"❌ Not a member: `{member}`"}
+
     if member.bot:
         # log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
         return return_msg | {'success': False, 'value': f"❌ Trying to update a bot. What the helly."}
@@ -693,7 +814,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                     await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}')
+                    raise Exception(f'❌ Update failed for `{member if member else member_id}`: {return_value['value']}')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
@@ -740,11 +861,12 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
         try:
             # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
             if failed_msg:
-                await channel.send(failed_msg)
+                log(guild, failed_msg)
+                await _send_chunked(channel, failed_msg)
 
             if success_msg:
                 log(guild, channel_msg := f"{success_msg}")
-                await channel.send(channel_msg)
+                await _send_chunked(channel, channel_msg)
 
         except Exception as e:
             log(guild, f'Error at automatic loop sending channel msg: {e}')
