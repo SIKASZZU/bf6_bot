@@ -433,8 +433,22 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
         try:
             API_URL = build_api_url(name)
             async with session.get(API_URL) as response:
+                body = await response.text()
+                log(
+                    guild,
+                    f"[Attempt {attempt}/{API_MAX_RETRIES}] "
+                    f"{name}: "
+                    f"HTTP {response.status} | "
+                    f"Body={body!r} | "
+                    f"Headers={dict(response.headers)}"
+                )
+
                 if response.status != 200:
-                    raise Exception(f'{response}')
+                    raise Exception(
+                        f"HTTP {response.status} | "
+                        f"URL: {response.url} | "
+                        f"Body: {body}"
+                    )
 
                 stats = await response.json()
 
@@ -445,9 +459,11 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
 
         except Exception as e:
             last_error = e
-            if attempt <= API_MAX_RETRIES:
+
+            if attempt < API_MAX_RETRIES:
                 # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
+
             continue
 
     log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
