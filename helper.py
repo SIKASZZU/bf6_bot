@@ -139,6 +139,14 @@ class EmbedPager(discord.ui.View):
         if getattr(self, "message", None):
             await self.message.edit(view=self)
 
+def _split_message(text: str, limit: int = 1900) -> list[str]:
+    """Splits text into <=limit chunks on line boundaries (hard-slices any single oversize line)."""
+    lines = [l.rstrip(', ') for l in text.split('\n') if l.strip()]
+    pages = []
+    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
+        pages.extend(chunk[i:i + limit] for i in range(0, len(chunk), limit))
+    return pages
+
 async def _send_chunked(channel, text: str, limit: int = 1900):
     lines = [l for l in text.split('\n') if l.strip()]
     for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
