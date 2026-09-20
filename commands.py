@@ -46,7 +46,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     """Manually forces update on member. """
 
     member_str = f"`{member}`" if member else ""
-    await helper.send_interaction_message(interaction, update_msg := f"(Updating... {member_str})")
+    await helper.send_interaction_message(interaction, update_msg := f"🔄 Updating... {member_str}")
     log(interaction.guild, update_msg)
 
     target = member or interaction.user
@@ -71,7 +71,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
             if not is_last and (now - last_edit) < 2:
                 return
             last_edit = now
-            await interaction.edit_original_response(content=f"🔄 Updating... ({done}/{total} links updated)")
+            await interaction.edit_original_response(content=f"🔄 Updating... {done}/{total}")
 
         return_value = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
 
