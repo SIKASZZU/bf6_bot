@@ -183,7 +183,7 @@ async def set_update_interval(interaction: discord.Interaction, hours: int):
 async def display_commands(interaction: discord.Interaction):
     await helper.send_interaction_message(interaction, content=helper._build_commands_message())
 
-@bot.tree.command(name='linked', description=f'Display established links.')
+@bot.tree.command(name='linked', description=f'Display linked members.')
 @app_commands.describe(
     member='Discord member',
 )
@@ -191,11 +191,12 @@ async def display_links(interaction: discord.Interaction, member: discord.Member
     embeds = helper._build_linked_message(interaction.guild, helper.load_data(), member)
     kwargs = {"view": helper.EmbedPager(embeds)} if len(embeds) > 1 else {}
     await helper.send_interaction_message(interaction, embeds[0], **kwargs)
-    # await helper.send_interaction_message(interaction, content=helper._build_linked_message(interaction.guild, helper.load_data(), member))
 
-@bot.tree.command(name='unlinked', description=f'Have all the unlinked members be displayed.')
+@bot.tree.command(name='unlinked', description=f'Display unlinked members.')
 async def display_unlinks(interaction: discord.Interaction):
-    await helper.send_interaction_message(interaction, content=helper._build_unlinked_message(interaction.guild, helper.load_data()))
+    embeds = helper._build_unlinked_message(interaction.guild, helper.load_data())
+    kwargs = {"view": helper.EmbedPager(embeds)} if len(embeds) > 1 else {}
+    await helper.send_interaction_message(interaction, content=embeds[0], **kwargs)
 
 @bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
 async def display_info(interaction: discord.Interaction):

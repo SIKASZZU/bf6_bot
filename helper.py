@@ -254,23 +254,19 @@ def _build_linked_message(
     )
 
     embed = discord.Embed(
-        title="📊 Linked accounts" if not member else f"**`{member_name}`** linked account",
+        title="👥 Linked accounts" if not member else f"**`{member_name}`** linked account",
         color=discord.Color.blue()
     )
 
-    if not server_data:
+    if not (server_data := data.get(str(guild.id))):
         embed.description = (
-            "No linked accounts found for this server in the database."
+            "No linked accounts found for this server."
             if not member
             else "No link"
         )
         return [embed]
 
     lines = []
-
-    if not (server_data := data.get(str(guild.id))):
-        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
-        return embed
 
     for discord_id, entry in server_data.items():
 
@@ -299,7 +295,7 @@ def _build_linked_message(
 
     if not lines:
         embed.description = (
-            "No linked accounts found for this server in the database."
+            "No linked accounts found for this server."
             if not member
             else "No link"
         )
@@ -310,12 +306,17 @@ def _build_linked_message(
     return _paginate_lines(embed.title, lines, embed.color)
 
 def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
-    server_data = data.get(str(guild.id))
 
     embed = discord.Embed(
         title="👥 Unlinked members",
         color=discord.Color.orange()
     )
+
+    if not (server_data := data.get(str(guild.id))):
+        embed.description = (
+            "No unlinked accounts found for this server."
+        )
+        return [embed]
 
     lines = []
 
