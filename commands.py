@@ -4,7 +4,7 @@ import time
 
 from globals import *
 import helper
-from ranks import create_roles
+from ranks import create_roles, check_for_roles
 
 
 @bot.tree.command(name='link', description='Link Discord account to game account.')
@@ -26,9 +26,9 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     # if platform not in VALID_PLATFORMS:
     #     await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
     #     return
-
     data = helper.load_data()
-    data.setdefault(str(interaction.guild.id))[str(target.id)] = {"name": name, "platform": platform}
+    print(data, interaction.guild.id, target.id, name, platform)
+    data.setdefault(str(interaction.guild.id), {})[str(target.id)] = {"name": name, "platform": platform}
     helper.save_data(data)
 
     if target.id == interaction.user.id:
@@ -93,6 +93,27 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
     except Exception as e:
         log(interaction.guild, fail_msg := f'❌ {e}')
         await interaction.edit_original_response(content=fail_msg[:2000])
+
+@bot.tree.command(name='check-server-role-status', description='Check for missing / existing roles within server.')
+async def show_missing_roles(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    existing, missing = await check_for_roles(interaction.guild)
+
+    message = discord.Embed(
+            title="⚙️ Role overview",
+            color=discord.Color.green()
+        )
+
+    if not existing and not missing:
+        message.description = "❌ Something went wrong trying to create roles."
+        message.color = discord.Color.red()
+        return await helper.send_interaction_message(interaction, content=message)
+
+    helper._add_chunked_field(message, "✅ Existing roles", existing)
+    helper._add_chunked_field(message, "⚠️ Missing roles: (/create-roles)", missing)
+    message.color = discord.Color.orange()
+    await helper.send_interaction_message(interaction, content=message)
 
 @bot.tree.command(name='create-roles', description='Creates all possible career rank roles for bot to assign.')
 async def setup_roles(interaction: discord.Interaction):

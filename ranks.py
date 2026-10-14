@@ -32,6 +32,21 @@ def getRankNameFromCareerRank(userCareerRank: int) -> str:
             return rank_name
     return None
 
+async def check_for_roles(guild: discord.Guild):
+    existing_role_names = {role.name for role in guild.roles}
+
+    existing = []
+    missing = []
+
+    for rank_name in r_dict.keys():
+        if rank_name in existing_role_names:
+            existing.append(rank_name)
+            continue
+
+        missing.append(rank_name)
+
+    return existing, missing
+
 async def create_roles(guild: discord.Guild):
     existing_role_names = {role.name for role in guild.roles}
 
