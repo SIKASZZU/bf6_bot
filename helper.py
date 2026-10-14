@@ -1,6 +1,7 @@
 import json
 import aiohttp
 import time
+import math
 from discord.ext import commands, tasks
 from discord import app_commands
 import asyncio
@@ -165,7 +166,6 @@ def _build_commands_message():
     return embed
 
 def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
-    server_data = data.get(str(guild.id))
 
     resolved = guild.get_member(int(member.id)) if member else None
     member_name = resolved.name if resolved else (f"<left server> ({member.id})" if member else None)
@@ -176,6 +176,10 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
     )
 
     lines = []
+
+    if not (server_data := data.get(str(guild.id))):
+        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
+        return embed
 
     for discord_id, entry in server_data.items():
         if member and discord_id == str(member.id):
@@ -191,7 +195,7 @@ def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Memb
                 f"`{member_label}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
             )
 
-    if not server_data or not lines:
+    if not lines:
         embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
         return embed
 
@@ -678,7 +682,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
 
     player_update_summary_list: list = []
     failed_player_updates_summary_list: list = []
-    linked_member_ids = list(load_data().get(str(guild.id)).keys())
+    linked_member_ids = list(load_data().get(str(guild.id), {}).keys())
 
     log(guild, f"[START AUTOMATIC UPDATE] Total linked: {len(linked_member_ids)} member{'' if len(linked_member_ids)==1 else 's'}.")
     async with aiohttp.ClientSession() as session:
@@ -705,13 +709,17 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
     return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}
 
-def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
-    if not interval_hours:
-        log(bot.get_guild(guild_id), f'{interval_hours} is not valid. Returning.')
-        return
-
+def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop | None:
     if not guild_id:
         log(bot.get_guild(guild_id), f'{guild_id} is not valid. Returning.')
+        return
+
+    if (
+        not isinstance(interval_hours, (int, float))
+        or not math.isfinite(interval_hours)
+        or interval_hours <= 0
+    ):
+        log(bot.get_guild(guild_id), f'{interval_hours} is not a valid update interval. Returning.')
         return
 
     @tasks.loop(hours=interval_hours)
@@ -753,13 +761,23 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop:
 
 def start_guild_update_loop(guild: discord.Guild):
     """Starts (or restarts) the automatic update loop for one guild, using its configured interval."""
-    loop = _make_guild_update_loop(guild.id, load_config().get(str(guild.id)).get('update_interval'))
+    existing = running_loops.get(guild.id)
+    if existing and existing.is_running():
+        return
+
+    guild_config = load_config().get(str(guild.id), {})
+    interval_hours = guild_config.get('update_interval', AUTO_UPDATE_TIMER_HOURS)
+    loop = _make_guild_update_loop(guild.id, interval_hours)
+    if loop is None:
+        running_loops.pop(guild.id, None)
+        return
+
     running_loops[guild.id] = loop
     loop.start()
 
 def restart_guild_update_loop(guild: discord.Guild):
     """Call this after update_interval changes in config, so the new interval takes effect."""
-    existing = running_loops.get(guild.id)
+    existing = running_loops.pop(guild.id, None)
     if existing:
         existing.cancel()
     start_guild_update_loop(guild)

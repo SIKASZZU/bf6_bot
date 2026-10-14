@@ -2,7 +2,7 @@
 *.env
 *.pyc
 
-data/
+data/*
 
 venv/
 __pycache__/

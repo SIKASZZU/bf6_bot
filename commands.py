@@ -192,9 +192,9 @@ async def display_unlinks(interaction: discord.Interaction):
 @bot.tree.command(name='info', description='Sends comprehensive information about the bot and how to use it.')
 async def display_info(interaction: discord.Interaction):
     config = load_config()
-    guild_config = config.get(str(interaction.guild.id))
-    linked_count = len(helper.load_data().get(str(interaction.guild.id)))
-    update_interval = guild_config.get('update_interval')
+    guild_config = config.get(str(interaction.guild.id), {})
+    linked_count = len(helper.load_data().get(str(interaction.guild.id), {}))
+    update_interval = guild_config.get('update_interval', AUTO_UPDATE_TIMER_HOURS)
     channel_id = guild_config.get('channel_id')
 
     message = discord.Embed(
@@ -219,7 +219,7 @@ async def display_info(interaction: discord.Interaction):
     )
 
     # Setup Status
-    channel_status = f"<#{channel_id}>" if (channel_id and bot.get_guild(interaction.guild.id).get_channel(channel_id)) else "❌ Not configured. Use /set-channel."
+    channel_status = f"<#{channel_id}>" if (channel_id and interaction.guild.get_channel(channel_id)) else "❌ Not configured. Use /set-channel."
     role_id = guild_config.get('permissioned_role_id')
     authorised_role_display = f"<@&{role_id}>" if role_id else "Administrator only"
 

@@ -23,7 +23,7 @@ def build_api_url(name: str) -> str:
     params = urlencode({'name': name, 'platform': DEFAULT_PLATFORM})
     return f"{API_BASE_URL}?{params}"
 
-file_folder = '/data'
+file_folder = '/data' if not DEV_MODE else 'data'
 def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
