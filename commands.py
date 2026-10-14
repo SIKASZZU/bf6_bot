@@ -215,7 +215,7 @@ async def display_links(interaction: discord.Interaction, member: discord.Member
 
 @bot.tree.command(name='unlinked', description=f'Display unlinked members.')
 async def display_unlinks(interaction: discord.Interaction):
-    embeds = helper._build_unlinked_message(interaction.guild, helper.load_data())
+    embeds = await helper._build_unlinked_message(interaction.guild, helper.load_data())
     kwargs = {"view": helper.EmbedPager(embeds)} if len(embeds) > 1 else {}
     await helper.send_interaction_message(interaction, content=embeds[0], **kwargs)
 

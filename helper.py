@@ -274,7 +274,7 @@ async def _build_linked_message(
     # embed.description = "\n\n".join(lines)
     return _paginate_lines(embed.title, lines, embed.color)
 
-def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
+async def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
 
     embed = discord.Embed(
         title="👥 Unlinked members",
@@ -289,17 +289,19 @@ def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
 
     lines = []
 
-    for member in guild.members:
+    guild_members = [m async for m in guild.fetch_members()]
+    for member in guild_members:
         if member.bot:
             continue
-        if str(member.id) not in server_data.keys():
+        if str(member.id) not in server_data:
             lines.append(f"{member}")
 
     if not lines:
         embed.description = "All members are linked!"
     else:
         embed.description = "\n".join(lines)
-    return embed
+
+    return [embed]
 
 def _get_time_to_next_update(guild: discord.Guild):
     try:
