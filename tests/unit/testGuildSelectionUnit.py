@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, PropertyMock, patch
+from unittest.mock import AsyncMock, patch
 
 import helper
 
@@ -11,7 +11,7 @@ class FakeGuild:
         self.members = members or []
 
 
-    def get_member(self, member_id):
+    def fetch_member(self, member_id):
         for member in self.members:
             if getattr(member, "id", None) == int(member_id):
                 return member

@@ -208,14 +208,14 @@ def _build_commands_message():
 
     return embed
 
-def _build_linked_message(
+async def _build_linked_message(
     guild: discord.Guild,
     data: dict,
     member: discord.Member = None
 ) -> discord.Embed:
 
 
-    resolved = guild.get_member(int(member.id)) if member else None
+    resolved = await guild.fetch_member(int(member.id)) if member else None
     member_name = (
         resolved.name
         if resolved
@@ -248,7 +248,7 @@ def _build_linked_message(
             break
 
         elif not member:
-            member_guild = guild.get_member(int(discord_id))
+            member_guild = await guild.fetch_member(int(discord_id))
             member_label = (
                 member_guild.name
                 if member_guild
@@ -775,7 +775,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
     log(guild, f"[START AUTOMATIC UPDATE] Total linked: {len(linked_member_ids)} member{'' if len(linked_member_ids)==1 else 's'}.")
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
-            member = guild.get_member(int(member_id))
+            member = await guild.fetch_member(int(member_id))
 
             try:
                 return_value: dict = await _update_member(guild, member, session)

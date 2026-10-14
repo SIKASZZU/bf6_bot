@@ -15,7 +15,14 @@ intents.members = True
 
 COMMAND_PREFIX = '/'
 
-bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
+bot = commands.Bot(
+    command_prefix=COMMAND_PREFIX, 
+    intents=intents,
+    max_messages=None,
+    chunk_guilds_at_startup=False,
+    member_cache_flags=discord.MemberCacheFlags.none()
+)
+
 bot.remove_command('help')
 
 API_BASE_URL = 'https://api.gametools.network/bf6/profile/'

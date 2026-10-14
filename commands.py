@@ -209,7 +209,7 @@ async def display_commands(interaction: discord.Interaction):
     member='Discord member',
 )
 async def display_links(interaction: discord.Interaction, member: discord.Member = None):
-    embeds = helper._build_linked_message(interaction.guild, helper.load_data(), member)
+    embeds = await helper._build_linked_message(interaction.guild, helper.load_data(), member)
     kwargs = {"view": helper.EmbedPager(embeds)} if len(embeds) > 1 else {}
     await helper.send_interaction_message(interaction, embeds[0], **kwargs)
 

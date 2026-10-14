@@ -9,8 +9,9 @@ class FakeGuild:
         self.id = id
         self.name = f"Guild {id}"
 
-    def get_member(self, member_id):
+    def fetch_member(self, member_id):
         return None  # simulate no cached members for this test
+
 class FakeMember:
     def __init__(self, id, name):
         self.id = id
@@ -23,7 +24,7 @@ class FakeGuildWithMember(FakeGuild):
         super().__init__(id)
         self._member = member
 
-    def get_member(self, member_id):
+    def fetch_member(self, member_id):
         return self._member if member_id == self._member.id else None
 
 def _embed_text(embeds) -> str:
