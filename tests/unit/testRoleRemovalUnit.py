@@ -34,8 +34,8 @@ class TestRoleRemoval(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(member.removed, [("BF6 Kapral", "Rank sync - removing obsolete roles")])
         self.assertEqual(result, {
             "success": True,
-            "value": "Removed roles: @BF6 Kapral",
-            "rank_removed": "@BF6 Kapral",
+            "value": "Removed roles: BF6 Kapral",
+            "rank_removed": "BF6 Kapral",
         })
 
     async def test_remove_rank_role_resolves_string_role_names(self):

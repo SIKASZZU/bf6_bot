@@ -502,7 +502,7 @@ async def on_member_remove(member: discord.Member):
     if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
-        log(member.guild, f"[LEFT] `{member.name}` ({str(member.id)}) left the guild - removed their link from data.")
+        log(member.guild, f"[LEFT] `{member.name}` left the guild - removed their link from data.")
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -515,14 +515,6 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
             API_URL = build_api_url(name)
             async with session.get(API_URL) as response:
                 body = await response.text()
-                log(
-                    guild,
-                    f"[Attempt {attempt}/{API_MAX_RETRIES}] "
-                    f"{name}: "
-                    f"HTTP {response.status} | "
-                    f"Body={body!r} | "
-                    f"Headers={dict(response.headers)}"
-                )
 
                 if response.status != 200:
                     raise Exception(
@@ -626,7 +618,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
 
     try:
         await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
-        removed_names = ", ".join(role.mention for role in roles_to_remove)
+        removed_names = ", ".join(role.name for role in roles_to_remove)
         # log(guild, msg := f"Removed roles: {removed_names}.")
         return {"success": True, "value": f"Removed roles: {removed_names}", "rank_removed": removed_names}
 
@@ -653,16 +645,16 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, return_msg := f"Bot's role is too low to assign {role.mention} - move the bot's role higher.")
+        log(guild, return_msg := f"Bot's role is too low to assign {role.name} - move the bot's role higher.")
         return {"success": False, "value": return_msg}
 
     try:
         return_msg = None
         if role not in member.roles:
             await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {role.mention}")
+            log(guild, return_msg := f"Assigned rank: {role.name}")
 
-        return {"success": True, "value": return_msg or f'Already has rank: {role.mention}', "rank_added": rank_name if return_msg else None }
+        return {"success": True, "value": return_msg or f'Already has rank: {role.name}', "rank_added": rank_name if return_msg else None }
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")

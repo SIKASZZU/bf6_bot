@@ -26,8 +26,8 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
     # if platform not in VALID_PLATFORMS:
     #     await helper.send_interaction_message(interaction, f"❌ Unknown platform `{platform}`. Valid options: {', '.join(sorted(VALID_PLATFORMS))}")
     #     return
+
     data = helper.load_data()
-    print(data, interaction.guild.id, target.id, name, platform)
     data.setdefault(str(interaction.guild.id), {})[str(target.id)] = {"name": name, "platform": platform}
     helper.save_data(data)
 
