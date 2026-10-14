@@ -9,7 +9,7 @@ class FakeGuild:
         self.id = id
         self.name = f"Guild {id}"
 
-    def fetch_member(self, member_id):
+    async def fetch_member(self, member_id):
         return None  # simulate no cached members for this test
 
 class FakeMember:
@@ -24,7 +24,7 @@ class FakeGuildWithMember(FakeGuild):
         super().__init__(id)
         self._member = member
 
-    def fetch_member(self, member_id):
+    async def fetch_member(self, member_id):
         return self._member if member_id == self._member.id else None
 
 def _embed_text(embeds) -> str:
@@ -41,7 +41,7 @@ def _embed_text(embeds) -> str:
             parts.append(e.footer.text)
     return "\n".join(parts)
 
-class TestCommandHelpMessages(unittest.TestCase):
+class TestCommandHelpMessages(unittest.IsolatedAsyncioTestCase):
     def assertInEmbed(self, check_for: str, embeds):
         """Asserts check_for appears anywhere in an Embed or list of Embeds."""
         self.assertIn(check_for, _embed_text(embeds), f"'{check_for}' was not found in the embed(s).")
@@ -60,7 +60,7 @@ class TestCommandHelpMessages(unittest.TestCase):
         message = helper._build_commands_message()
         self.assertNotInEmbed('!help', message)
 
-    def test_build_linked_message_includes_linked_accounts(self):
+    async def test_build_linked_message_includes_linked_accounts(self):
         data = {
             '123': {
                 '456': {'name': 'alice', 'platform': 'EA'}
@@ -68,17 +68,17 @@ class TestCommandHelpMessages(unittest.TestCase):
         }
 
         fake_guild = FakeGuild(id=123)
-        message = helper._build_linked_message(fake_guild, data)
+        message = await helper._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('456', message)
 
-    def test_build_linked_message_uses_member_mention_when_member_found(self):
+    async def test_build_linked_message_uses_member_mention_when_member_found(self):
         data = {'123': {'456': {'name': 'alice', 'platform': 'EA'}}}
         member = FakeMember(id=456, name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
-        message = helper._build_linked_message(fake_guild, data)
+        message = await helper._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('CoolPlayer', message)

@@ -11,7 +11,7 @@ class FakeGuild:
         self.members = members or []
 
 
-    def fetch_member(self, member_id):
+    async def fetch_member(self, member_id):
         for member in self.members:
             if getattr(member, "id", None) == int(member_id):
                 return member
