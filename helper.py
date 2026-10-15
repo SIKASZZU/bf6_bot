@@ -281,19 +281,18 @@ async def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.E
         color=discord.Color.orange()
     )
 
-    if not (server_data := data.get(str(guild.id))):
-        embed.description = (
-            "No unlinked accounts found for this server."
-        )
-        return [embed]
+    server_data = data.get(str(guild.id))
 
     lines = []
-
     guild_members = [m async for m in guild.fetch_members()]
     for member in guild_members:
         if member.bot:
             continue
-        if str(member.id) not in server_data:
+
+        elif not server_data:
+            lines.append(f"{member}")
+
+        elif str(member.id) not in server_data:
             lines.append(f"{member}")
 
     if not lines:
