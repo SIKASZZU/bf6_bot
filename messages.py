@@ -146,28 +146,28 @@ def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: 
     return embeds
 
 async def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
-
     resolved = await guild.fetch_member(int(member.id)) if member else None
+
     member_name = (resolved.name if resolved else (f"<left server> ({member.id})" if member else None))
     embed = discord.Embed(title="👥 Linked members" if not member else f"**`{member_name}`** linked account", color=discord.Color.blue())
+    embed.title += f' (EA id, level, role)' if member else f' (discord, EA id, level, role)'
 
     # There are no links in data
-    if not (server_data := data.get(str(guild.id))):
+    if not (server_data := data.get(str(guild.id))) or (member and str(member.id) not in server_data.keys()):
         embed.description = ("No linked accounts found." if not member else "No link")
         return [embed]
 
     rows = []
-    for discord_id, entry in server_data.items():
-        if member and discord_id == str(member.id):
-            rows.append((entry.get("name", "<unknown>"), str(entry.get("career_rank", "?")), entry.get("rank_name", "?")))
-            break
-
-        elif not member:
+    if member and str(member.id) in server_data.keys():
+        entry = server_data.get(str(member.id))
+        rows.append((entry.get("name", "<Unknown>"), str(entry.get("career_rank", "<Missing>")), entry.get("rank_name", "<Missing>")))
+    else:
+        for discord_id, entry in server_data.items():
             try:
                 label = (await guild.fetch_member(int(discord_id))).name
             except Exception:
                 label = f"<left> ({discord_id})"
-            rows.append((label, entry.get("name", "<unknown>"), str(entry.get("career_rank", "?")), entry.get("rank_name", "?")))
+            rows.append((label, entry.get("name", "<Unknown>"), str(entry.get("career_rank", "<Missing>")), entry.get("rank_name", "<Missing>")))
 
     # TODO: make this code nicer.
     COL_WIDTHS = (12, 0, 0, 0)
