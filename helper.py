@@ -109,11 +109,12 @@ def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
         chunks.append(current)
     return chunks
 
-def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n\n") -> list[discord.Embed]:
+def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n", code_block: bool = True) -> list[discord.Embed]:
     pages = _chunk_items(lines, max_len=4000, sep=sep)
     embeds = []
     for i, page in enumerate(pages, 1):
-        e = discord.Embed(title=title, description=page, color=color)
+        description = f"```\n{page}\n```" if code_block else page
+        e = discord.Embed(title=title, description=description, color=color)
         if len(pages) > 1:
             e.set_footer(text=f"Page {i}/{len(pages)} • {len(lines)} total")
         embeds.append(e)
@@ -208,12 +209,7 @@ def _build_commands_message():
 
     return embed
 
-async def _build_linked_message(
-    guild: discord.Guild,
-    data: dict,
-    member: discord.Member = None
-) -> discord.Embed:
-
+async def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
 
     resolved = await guild.fetch_member(int(member.id)) if member else None
     member_name = (
@@ -227,6 +223,7 @@ async def _build_linked_message(
         color=discord.Color.blue()
     )
 
+    # There are no links in data
     if not (server_data := data.get(str(guild.id))):
         embed.description = (
             "No linked accounts found for this server."
@@ -235,32 +232,50 @@ async def _build_linked_message(
         )
         return [embed]
 
-    lines = []
+    rows = []
 
     for discord_id, entry in server_data.items():
-
         if member and discord_id == str(member.id):
-            lines.append(
-                f"**EA:** `{entry.get('name', '<unknown>')}` · "
-                f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
-                f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
-            )
+            rows.append((
+                entry.get("name", "<unknown>"),
+                str(entry.get("career_rank", "?")),
+                entry.get("rank_name", "?"),
+            ))
             break
 
         elif not member:
-            member_guild = await guild.fetch_member(int(discord_id))
-            member_label = (
-                member_guild.name
-                if member_guild
-                else f"<left server> ({discord_id})"
-            )
+            try:
+                m = await guild.fetch_member(int(discord_id))
+                label = m.name
+            except discord.NotFound:
+                label = f"<left> ({discord_id})"
 
-            lines.append(
-                f"**`{member_label}`** | "
-                f"**EA:** `{entry.get('name', '<unknown>')}` · "
-                f"**Level:** `{entry.get('career_rank', '<Missing level>')}` · "
-                f"**Rank:** `{entry.get('rank_name', '<Missing rank>')}`"
-            )
+            rows.append((
+                label,
+                entry.get("name", "<unknown>"),
+                str(entry.get("career_rank", "?")),
+                entry.get("rank_name", "?"),
+            ))
+
+    COL_WIDTHS = (12, 0, 0, 0)
+
+    def _format_table(rows: list[tuple]) -> list[str]:
+        # single-member mode has 3 columns, so use the trailing widths
+        widths = COL_WIDTHS[-len(rows[0]):]
+        out = []
+        for r in rows:
+            cells = []
+            for i, (cell, w) in enumerate(zip(r, widths)):
+                if i == len(r) - 1:
+                    cells.append(cell)          # last column: no padding needed
+                elif cell.isdigit():
+                    cells.append(cell.rjust(w)) # level right-aligned
+                else:
+                    cells.append(cell.ljust(w))
+            out.append(" | ".join(cells))
+        return out
+
+    lines = _format_table(rows)
 
     if not lines:
         embed.description = (
@@ -270,8 +285,6 @@ async def _build_linked_message(
         )
         return [embed]
 
-    # Empty line between accounts
-    # embed.description = "\n\n".join(lines)
     return _paginate_lines(embed.title, lines, embed.color)
 
 async def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
