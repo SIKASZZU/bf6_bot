@@ -2,19 +2,51 @@ import json
 import aiohttp
 import time
 import math
-from discord.ext import commands, tasks
+from discord.ext import tasks
 from discord import app_commands
 import asyncio
 import datetime
 
+import messages
 from globals import *
 from ranks import getRankNameFromCareerRank, get_role_dict
+
+_last_command_time = 0
+
+
+class EmbedPager(discord.ui.View):
+    def __init__(self, embeds: list[discord.Embed]):
+        super().__init__(timeout=120)
+        self.embeds, self.i = embeds, 0
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i - 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i + 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if getattr(self, "message", None):
+            await self.message.edit(view=self)
+
+class WrongChannelError(app_commands.CheckFailure):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(f"Command must be used in <#{channel_id}>")
+
 
 def load_data() -> dict:
     conn = get_conn()
     rows = conn.execute(f'SELECT key, value FROM {DB_DATA_FILE}').fetchall()
     conn.close()
     return {key: json.loads(value) for key, value in rows}
+
 
 def save_data(data: dict):
     if not isinstance(data, dict):
@@ -30,19 +62,6 @@ def save_data(data: dict):
     conn.commit()
     conn.close()
 
-class WrongChannelError(app_commands.CheckFailure):
-    def __init__(self, channel_id: int):
-        self.channel_id = channel_id
-        super().__init__(f"Command must be used in <#{channel_id}>")
-
-def _get_tree_commands():
-    tree_commands = getattr(bot.tree, 'get_commands', None)
-    if callable(tree_commands):
-        try:
-            return list(tree_commands())
-        except TypeError:
-            return []
-    return list(getattr(bot.tree, 'commands', []))
 
 def _get_guild_role_status(guild: discord.Guild) -> list:
     missing_roles: bool = False
@@ -68,6 +87,7 @@ def _get_guild_role_status(guild: discord.Guild) -> list:
     if position_below:
         return_v.append(f"Bot's role is positioned below some role(s) - move the bot's role higher.")
     return return_v
+
 
 def check_guild_requirements(guild: discord.Guild) -> dict:
     """Checks everything the bot needs to run an update in this guild.
@@ -96,224 +116,6 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
 
     return {"ok": not issues, "issues": issues}
 
-def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
-    chunks, current = [], ''
-    for item in items:
-        piece = item if not current else f'{sep}{item}'
-        if current and len(current) + len(piece) > max_len:
-            chunks.append(current)
-            current = item
-        else:
-            current += piece
-    if current:
-        chunks.append(current)
-    return chunks
-
-def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n", code_block: bool = True) -> list[discord.Embed]:
-    pages = _chunk_items(lines, max_len=4000, sep=sep)
-    embeds = []
-    for i, page in enumerate(pages, 1):
-        description = f"```\n{page}\n```" if code_block else page
-        e = discord.Embed(title=title, description=description, color=color)
-        if len(pages) > 1:
-            e.set_footer(text=f"Page {i}/{len(pages)} • {len(lines)} total")
-        embeds.append(e)
-    return embeds
-
-class EmbedPager(discord.ui.View):
-    def __init__(self, embeds: list[discord.Embed]):
-        super().__init__(timeout=120)
-        self.embeds, self.i = embeds, 0
-
-    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
-    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.i = (self.i - 1) % len(self.embeds)
-        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
-
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
-    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.i = (self.i + 1) % len(self.embeds)
-        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
-
-    async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
-        if getattr(self, "message", None):
-            await self.message.edit(view=self)
-
-def _split_message(text: str, limit: int = 1900) -> list[str]:
-    """Splits text into <=limit chunks on line boundaries (hard-slices any single oversize line)."""
-    lines = [l.rstrip(', ') for l in text.split('\n') if l.strip()]
-    pages = []
-    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
-        pages.extend(chunk[i:i + limit] for i in range(0, len(chunk), limit))
-    return pages
-
-async def _send_chunked(channel, text: str, limit: int = 1900):
-    lines = [l for l in text.split('\n') if l.strip()]
-    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
-        for i in range(0, len(chunk), limit):
-            await channel.send(chunk[i:i + limit])
-
-def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = '', sep: str = ', '):
-    if not items:
-        return
-
-    chunks = _chunk_items(items, max_len=max_len, sep=sep)
-
-    if suffix:
-        if len(chunks[-1]) + len(suffix) <= max_len:
-            chunks[-1] += suffix
-        else:
-            chunks.append(suffix.lstrip('\n'))
-
-    for i, chunk in enumerate(chunks):
-        embed.add_field(name=name if i == 0 else '\u200b', value=chunk, inline=False)
-
-def _build_commands_message():
-    embed = discord.Embed(
-        title="📋 All commands",
-        color=discord.Color.blue()
-    )
-
-    exempt_fields = []
-    restricted_fields = []
-
-    seen_names = set()
-    all_commands = list(bot.commands) + list(_get_tree_commands())
-    for cmd in sorted(all_commands, key=lambda c: c.name):
-        if getattr(cmd, 'hidden', False):
-            continue
-
-        name = getattr(cmd, 'name', None)
-        if not name or name in seen_names:
-            continue
-        seen_names.add(name)
-
-        prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
-
-        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
-        field_value = f"`{prefix}{name}` — {help_text}"
-
-        # if name in CHANNEL_CHECK_EXEMPT:
-        #     exempt_fields.append(field_value)
-        # else:
-        restricted_fields.append(field_value)
-
-    # if exempt_fields:
-    #     embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
-
-    if restricted_fields:
-        #Available in only set channel
-        embed.add_field(name="", value="\n".join(restricted_fields), inline=False)
-
-    return embed
-
-async def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
-
-    resolved = await guild.fetch_member(int(member.id)) if member else None
-    member_name = (
-        resolved.name
-        if resolved
-        else (f"<left server> ({member.id})" if member else None)
-    )
-
-    embed = discord.Embed(
-        title="👥 Linked accounts" if not member else f"**`{member_name}`** linked account",
-        color=discord.Color.blue()
-    )
-
-    # There are no links in data
-    if not (server_data := data.get(str(guild.id))):
-        embed.description = (
-            "No linked accounts found for this server."
-            if not member
-            else "No link"
-        )
-        return [embed]
-
-    rows = []
-
-    for discord_id, entry in server_data.items():
-        if member and discord_id == str(member.id):
-            rows.append((
-                entry.get("name", "<unknown>"),
-                str(entry.get("career_rank", "?")),
-                entry.get("rank_name", "?"),
-            ))
-            break
-
-        elif not member:
-            try:
-                m = await guild.fetch_member(int(discord_id))
-                label = m.name
-            except discord.NotFound:
-                label = f"<left> ({discord_id})"
-
-            rows.append((
-                label,
-                entry.get("name", "<unknown>"),
-                str(entry.get("career_rank", "?")),
-                entry.get("rank_name", "?"),
-            ))
-
-    COL_WIDTHS = (12, 0, 0, 0)
-
-    def _format_table(rows: list[tuple]) -> list[str]:
-        # single-member mode has 3 columns, so use the trailing widths
-        widths = COL_WIDTHS[-len(rows[0]):]
-        out = []
-        for r in rows:
-            cells = []
-            for i, (cell, w) in enumerate(zip(r, widths)):
-                if i == len(r) - 1:
-                    cells.append(cell)          # last column: no padding needed
-                elif cell.isdigit():
-                    cells.append(cell.rjust(w)) # level right-aligned
-                else:
-                    cells.append(cell.ljust(w))
-            out.append(" | ".join(cells))
-        return out
-
-    lines = _format_table(rows)
-
-    if not lines:
-        embed.description = (
-            "No linked accounts found for this server."
-            if not member
-            else "No link"
-        )
-        return [embed]
-
-    return _paginate_lines(embed.title, lines, embed.color)
-
-async def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
-
-    embed = discord.Embed(
-        title="👥 Unlinked members",
-        color=discord.Color.orange()
-    )
-
-    server_data = data.get(str(guild.id))
-
-    lines = []
-    guild_members = [m async for m in guild.fetch_members()]
-    for member in guild_members:
-        if member.bot:
-            continue
-
-        elif not server_data:
-            lines.append(f"{member}")
-
-        elif str(member.id) not in server_data:
-            lines.append(f"{member}")
-
-    if not lines:
-        embed.description = "All members are linked!"
-    else:
-        embed.description = "\n".join(lines)
-
-    return [embed]
 
 def _get_time_to_next_update(guild: discord.Guild):
     try:
@@ -334,47 +136,6 @@ def _get_time_to_next_update(guild: discord.Guild):
         print(f"Error calculating next update time: {e}")
         return "❌ Needs /set-channel"
 
-def _build_no_channel_warning_embed() -> discord.Embed:
-    warning_embed = discord.Embed(
-        title="⚠️ Report Channel Not Configured",
-        description="No report channel has been set for this server!",
-        color=discord.Color.red()
-    )
-    warning_embed.add_field(
-        name="How to fix:",
-        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
-        inline=False
-    )
-    return warning_embed
-
-async def _warn_user_if_no_channel(interaction: discord.Interaction):
-    """DMs the invoking user
-    if this guild has no report channel configured yet. Called from send_interaction_message
-    so it fires after every slash command without needing to touch each command."""
-    if not interaction.guild:
-        return
-
-    if load_config().get(str(interaction.guild.id), {}).get('channel_id'):
-        return
-
-    try:
-        # await interaction.user.send(embed=_build_no_channel_warning_embed())
-        await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
-    except Exception as e:
-        log(interaction.guild, f"[WARNING] Failed to DM `{interaction.user.name}` about missing channel config: {e}")
-
-async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
-    """Send a slash-command response safely, even after defer() or a prior response."""
-    if isinstance(content, discord.Embed):
-        kwargs['embed'] = content
-        content = None
-
-    if interaction.response.is_done():
-        await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
-    else:
-        await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
-
-    await _warn_user_if_no_channel(interaction)
 
 def get_player_entry(data: dict, guild_id: int, discord_id: int):
     """
@@ -389,21 +150,20 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
         return {"name": entry, "platform": DEFAULT_PLATFORM}
     return entry
 
-_last_command_time = 0
-REQUEST_INTERVAL_SECONDS = 2
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, WrongChannelError):
-        await send_interaction_message(interaction, f"❌ This command can only be used in <#{error.channel_id}>.", ephemeral=True)
+        await messages.send_interaction_message(interaction, f"❌ This command can only be used in <#{error.channel_id}>.", ephemeral=True)
         return
 
     if isinstance(error, app_commands.CheckFailure):
-        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
+        await messages.send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
         return
 
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
-    await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
+    await messages.send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
+
 
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
     # 1. DM Guard
@@ -413,8 +173,8 @@ async def global_interaction_check(interaction: discord.Interaction) -> bool:
     # 2. Rate-limiter / Cooldown check
     global _last_command_time
     now = time.monotonic()
-    if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
-        raise app_commands.CheckFailure(f"{REQUEST_INTERVAL_SECONDS} cooldown after every command!")
+    if now - _last_command_time < COMMAND_REQUEST_COOLDOWN:
+        raise app_commands.CheckFailure(f"{COMMAND_REQUEST_COOLDOWN} cooldown after every command!")
     _last_command_time = now
 
     # Load full configuration safely
@@ -446,6 +206,7 @@ async def global_interaction_check(interaction: discord.Interaction) -> bool:
 
 bot.tree.interaction_check = global_interaction_check
 
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
@@ -457,8 +218,6 @@ async def on_ready():
 
         start_guild_update_loop(guild)
 
-    # if not update_all_players.is_running():
-    #     update_all_players.start()
 
 @bot.event
 async def on_guild_join(guild):
@@ -487,6 +246,7 @@ async def on_guild_join(guild):
     log(guild, msg)
     start_guild_update_loop(guild)
 
+
 @bot.event
 async def on_guild_remove(guild):
     config = load_config()
@@ -509,6 +269,7 @@ async def on_guild_remove(guild):
     if existing:
         existing.cancel()
 
+
 @bot.event
 async def on_member_remove(member: discord.Member):
     data = load_data()
@@ -517,6 +278,7 @@ async def on_member_remove(member: discord.Member):
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
         log(member.guild, f"[LEFT] `{member.name}` left the guild - removed their link from data.")
+
 
 async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
@@ -555,6 +317,7 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
 
     log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
     return None
+
 
 def get_rank_value_from_data(stats: dict) -> int:
     """
@@ -608,6 +371,7 @@ def get_rank_value_from_data(stats: dict) -> int:
 
     return None
 
+
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
     """
     Removes all obsolete rank roles from a member, keeping only their current rank role.
@@ -639,6 +403,7 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
     except Exception as e:
         # log(guild, return_msg := f"Remove rank error: {e}")
         return {"success": False, "value": f"Remove rank error: {e}"}
+
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str) -> dict:
     """
@@ -673,6 +438,7 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
         return {"success": False, "value": return_msg}
+
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession):
     """
@@ -745,6 +511,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     # log(guild, success_msg := )
     return return_msg | {'value': f'✅ Update successful for `{member.name}`'}
 
+
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
 
@@ -758,12 +525,14 @@ def _build_update_summary(return_value: dict) -> str:
 
     return ', '.join(parts)
 
+
 def _has_rank_change(return_value: dict) -> bool:
     """True only if this member's update actually assigned or removed a rank
     role. Used to filter out no-op successes from the automatic update report."""
     assign = return_value.get('assign_rank_role') or {}
     remove = return_value.get('remove_rank_role') or {}
     return bool(assign.get('rank_added')) or bool(remove.get('rank_removed'))
+
 
 async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_changes: bool = False) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
@@ -811,6 +580,7 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
     log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
     return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}
 
+# TODO: make this embed aswell like linked and shit is.
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop | None:
     if not guild_id:
         log(bot.get_guild(guild_id), f'{guild_id} is not valid. Returning.')
@@ -851,16 +621,17 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop 
             # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
             if failed_msg:
                 log(guild, failed_msg)
-                await _send_chunked(channel, failed_msg)
+                await messages._send_chunked(channel, failed_msg)
 
             if success_msg:
                 log(guild, channel_msg := f"{success_msg}")
-                await _send_chunked(channel, channel_msg)
+                await messages._send_chunked(channel, channel_msg)
 
         except Exception as e:
             log(guild, f'Error at automatic loop sending channel msg: {e}')
 
     return _loop
+
 
 def start_guild_update_loop(guild: discord.Guild):
     """Starts (or restarts) the automatic update loop for one guild, using its configured interval."""

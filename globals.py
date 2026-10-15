@@ -46,6 +46,8 @@ VALID_PLATFORMS = {'EA'}
 DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 3
+COMMAND_REQUEST_COOLDOWN: int = 2  # in seconds, how often a command can be called.
+
 
 # CHANNEL_CHECK_EXEMPT = ['set-channel', 'set-authorised-role', 'show-authorised-role']
 
