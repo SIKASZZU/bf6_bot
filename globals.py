@@ -3,6 +3,7 @@ import json
 import sqlite3
 import os
 import sys
+
 from discord.ext import commands, tasks
 from urllib.parse import urlencode
 
@@ -25,10 +26,22 @@ bot = commands.Bot(
 
 bot.remove_command('help')
 
-API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
-def build_api_url(name: str) -> str:
-    params = urlencode({'name': name, 'platform': DEFAULT_PLATFORM})
-    return f"{API_BASE_URL}?{params}"
+API_URL_PROFILE = 'https://api.gametools.network/bf6/profile/'
+API_URL_STATS = 'https://api.gametools.network/bf6/stats/'
+
+def build_api_url(name: str, pf: str, nucleus_id: str) -> str:
+    params = {
+        'name': name,
+        'platform': pf,
+        'skip_battlelog': True,
+        'lang': 'en-us',
+    }
+    if nucleus_id: params['nucleus_id'] = nucleus_id
+    return f"{API_URL_PROFILE}?{urlencode(params)}"
+
+def build_api_url_stats(name: str, pf: str) -> str:
+    params = urlencode({'name': name, 'platform': pf})
+    return f"{API_URL_STATS}?{params}"
 
 file_folder = '/data' if not DEV_MODE else 'data'
 def get_db_path():
