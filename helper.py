@@ -153,16 +153,31 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    async def send_error(description: str):
+        embeds = messages._paginate_lines(
+            "❌ Command failed",
+            [description],
+            discord.Color.red(),
+            code_block=False
+        )
+        kwargs = {"view": EmbedPager(embeds)} if len(embeds) > 1 else {}
+        await messages.send_interaction_message(
+            interaction,
+            embeds[0],
+            ephemeral=True,
+            **kwargs
+        )
+
     if isinstance(error, WrongChannelError):
-        await messages.send_interaction_message(interaction, f"❌ This command can only be used in <#{error.channel_id}>.", ephemeral=True)
+        await send_error(f"This command can only be used in <#{error.channel_id}>.")
         return
 
     if isinstance(error, app_commands.CheckFailure):
-        await messages.send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
+        await send_error("You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.")
         return
 
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
-    await messages.send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
+    await send_error(f"An unexpected error occurred: {error}")
 
 
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
@@ -508,9 +523,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     
     if not (nucleus_id := entry.get('nucleus_id')):
         nucleus_id = await _query_member_stats(name, platform, session)
-        data = load_data()
-        data[str(guild.id)][str(member.id)].update({'nucleus_id': nucleus_id})
-        save_data(data)
+        log(guild, message=f"nucleus_id query done for: {name}, {platform}, {nucleus_id}")
 
     if not (stats := await fetch_player_stats(guild, session, name, platform, nucleus_id)):
         # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
@@ -523,12 +536,13 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
-    # lol
     data = load_data()
     data[str(guild.id)][str(member.id)].update({
         'rank_name': concise_rank_name,
         'career_rank': rankValue
     })
+    if not (data.get('nucleus_id')):
+        data[str(guild.id)][str(member.id)].update({'nucleus_id': nucleus_id})
     save_data(data)
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)

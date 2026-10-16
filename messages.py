@@ -4,8 +4,6 @@ from discord.ext import commands
 
 from globals import bot, COMMAND_PREFIX
 from globals import load_config, log
-# from helper import _get_tree_commands
-
 
 def _build_no_channel_warning_embed() -> discord.Embed:
     warning_embed = discord.Embed(
@@ -32,12 +30,11 @@ async def _warn_user_if_no_channel(interaction: discord.Interaction):
         return
 
     try:
-        # await interaction.user.send(embed=_build_no_channel_warning_embed())
         await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
     except Exception as e:
         log(interaction.guild, f"[WARNING] Failed to DM `{interaction.user.name}` about missing channel config: {e}")
 
-async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
+async def send_interaction_message(interaction: discord.Interaction, content: str | discord.Embed | None, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
     if isinstance(content, discord.Embed):
         kwargs['embed'] = content
@@ -105,10 +102,8 @@ def _get_tree_commands():
     return list(getattr(bot.tree, 'commands', []))
 
 
-def _build_commands_message():
-    embed = discord.Embed(title="📋 All commands", color=discord.Color.blue())
-
-    restricted_fields = []
+def _build_commands_message() -> list[discord.Embed]:
+    command_lines = []
 
     seen_names = set()
     all_commands = list(bot.commands) + list(_get_tree_commands())
@@ -126,16 +121,26 @@ def _build_commands_message():
         help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
         field_value = f"`{prefix}{name}` — {help_text}"
 
-        restricted_fields.append(field_value)
+        command_lines.append(field_value)
 
-    if restricted_fields:
-        embed.add_field(name="", value="\n".join(restricted_fields), inline=False)
+    if not command_lines:
+        command_lines.append("No commands available.")
 
-    return embed
+    return _paginate_lines(
+        "📋 All commands",
+        command_lines,
+        discord.Color.blue(),
+        code_block=False
+    )
 
 
 def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n", code_block: bool = True) -> list[discord.Embed]:
-    pages = _chunk_items(lines, max_len=4000, sep=sep)
+    bounded_lines = [
+        line[i:i + 4000]
+        for line in lines
+        for i in range(0, len(line), 4000)
+    ]
+    pages = _chunk_items(bounded_lines, max_len=4000, sep=sep)
     embeds = []
     for i, page in enumerate(pages, 1):
         description = f"```\n{page}\n```" if code_block else page
@@ -145,7 +150,7 @@ def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: 
         embeds.append(e)
     return embeds
 
-async def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
+async def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> list[discord.Embed]:
     resolved = await guild.fetch_member(int(member.id)) if member else None
 
     member_name = (resolved.name if resolved else (f"<left server> ({member.id})" if member else None))
@@ -192,7 +197,7 @@ async def _build_linked_message(guild: discord.Guild, data: dict, member: discor
     return _paginate_lines(embed.title, lines, embed.color)
 
 
-async def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
+async def _build_unlinked_message(guild: discord.Guild, data: dict) -> list[discord.Embed]:
     embed = discord.Embed(title="👥 Unlinked members", color=discord.Color.orange())
 
     server_data = data.get(str(guild.id))
@@ -214,4 +219,3 @@ async def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.E
         return [embed]
 
     return _paginate_lines(embed.title, lines, embed.color)
-

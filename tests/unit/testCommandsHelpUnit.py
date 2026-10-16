@@ -1,7 +1,7 @@
 import unittest
 import discord
 from commands import *
-import helper
+import messages
 
 
 class FakeGuild:
@@ -50,15 +50,29 @@ class TestCommandHelpMessages(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(check_for, _embed_text(embeds), f"'{check_for}' was unexpectedly found in the embed(s).")
 
     def test_build_commands_message_includes_slash_commands(self):
-        message = helper._build_commands_message()
+        message = messages._build_commands_message()
 
         self.assertInEmbed('/commands', message)
         self.assertInEmbed('/link', message)
         self.assertInEmbed('/update', message)
 
     def test_build_commands_message_excludes_default_help_command(self):
-        message = helper._build_commands_message()
+        message = messages._build_commands_message()
         self.assertNotInEmbed('!help', message)
+
+    def test_paginate_lines_splits_long_rows_within_embed_limits(self):
+        text = 'x' * 8500
+
+        embeds = messages._paginate_lines(
+            "Long output",
+            [text],
+            discord.Color.blue(),
+            code_block=False
+        )
+
+        self.assertGreater(len(embeds), 1)
+        self.assertEqual(''.join(embed.description for embed in embeds), text)
+        self.assertTrue(all(len(embed.description) <= 4096 for embed in embeds))
 
     async def test_build_linked_message_includes_linked_accounts(self):
         data = {
@@ -68,7 +82,7 @@ class TestCommandHelpMessages(unittest.IsolatedAsyncioTestCase):
         }
 
         fake_guild = FakeGuild(id=123)
-        message = await helper._build_linked_message(fake_guild, data)
+        message = await messages._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('456', message)
@@ -78,7 +92,7 @@ class TestCommandHelpMessages(unittest.IsolatedAsyncioTestCase):
         member = FakeMember(id=456, name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
-        message = await helper._build_linked_message(fake_guild, data)
+        message = await messages._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('CoolPlayer', message)
