@@ -29,7 +29,7 @@ bot.remove_command('help')
 API_URL_PROFILE = 'https://api.gametools.network/bf6/profile/'
 API_URL_STATS = 'https://api.gametools.network/bf6/stats/'
 
-def build_api_url(name: str, pf: str, nucleus_id: str) -> str:
+def build_api_url(name: str, pf: str, nucleus_id: str = None) -> str:
     params = {
         'name': name,
         'platform': pf,

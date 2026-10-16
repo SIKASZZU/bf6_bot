@@ -63,6 +63,10 @@ def save_data(data: dict):
     conn.close()
 
 
+def _embed_pager_kwargs(embeds: list[discord.Embed]) -> dict:
+    return {"view": EmbedPager(embeds)} if len(embeds) > 1 else {}
+
+
 def _get_guild_role_status(guild: discord.Guild) -> list:
     missing_roles: bool = False
     position_below: bool = False
