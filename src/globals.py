@@ -3,6 +3,7 @@ import json
 import sqlite3
 import os
 import sys
+
 from discord.ext import commands, tasks
 from urllib.parse import urlencode
 
@@ -15,15 +16,38 @@ intents.members = True
 
 COMMAND_PREFIX = '/'
 
-bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
+bot = commands.Bot(
+    command_prefix=COMMAND_PREFIX, 
+    intents=intents,
+    max_messages=None,
+    chunk_guilds_at_startup=False,
+    member_cache_flags=discord.MemberCacheFlags.none()
+)
+
 bot.remove_command('help')
 
-API_BASE_URL = 'https://api.gametools.network/bf6/profile/'
-def build_api_url(name: str) -> str:
-    params = urlencode({'name': name, 'platform': DEFAULT_PLATFORM})
-    return f"{API_BASE_URL}?{params}"
+API_URL_PROFILE = 'https://api.gametools.network/bf6/profile/'
+API_URL_STATS = 'https://api.gametools.network/bf6/stats/'
 
-file_folder = '/data' if not DEV_MODE else 'data'
+def build_api_url(name: str, pf: str, nucleus_id: str = None) -> str:
+    
+    params = {
+        'name': name,
+        'platform': pf,
+        'skip_battlelog': True,
+        'lang': 'en-us',
+    }
+
+    if nucleus_id: params['nucleus_id'] = nucleus_id
+
+    return f"{API_URL_PROFILE}?{urlencode(params)}"
+
+def build_api_url_stats(name: str, pf: str) -> str:
+    params = urlencode({'name': name, 'platform': pf})
+    return f"{API_URL_STATS}?{params}"
+
+file_folder = '/data'
+
 def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
@@ -39,16 +63,18 @@ VALID_PLATFORMS = {'EA'}
 DEFAULT_PLATFORM = 'EA'
 
 AUTO_UPDATE_TIMER_HOURS : int = 3
+COMMAND_REQUEST_COOLDOWN: int = 2  # in seconds, how often a command can be called.
+
 
 # CHANNEL_CHECK_EXEMPT = ['set-channel', 'set-authorised-role', 'show-authorised-role']
 
 running_loops: dict[int, tasks.Loop] = {}
 
-def log(guild: discord.Guild, message: str):
+def log(guild: discord.Guild | int, message: str):
     def get_caller() -> str:
         try: return sys._getframe(2).f_code.co_name
         except ValueError: return "Unknown"
-    print(f'[server:{guild.name if guild else 'Unknown'}] (func:{get_caller()}) msg: {message}')
+    print(f'[server:{guild.name if isinstance(guild, discord.Guild) else guild}] (func:{get_caller()}) msg: {message}')
 
 def get_conn():
     conn = sqlite3.connect(get_db_path())

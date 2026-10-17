@@ -1,7 +1,7 @@
 import discord
-from globals import log
-from english_ranks import EN_RANK_TIERS
-from estonian_ranks import EN_TO_ET
+from src.globals import log
+from src.english_ranks import EN_RANK_TIERS
+from src.estonian_ranks import EN_TO_ET
 
 
 def _build_r_dict() -> dict:
@@ -31,6 +31,21 @@ def getRankNameFromCareerRank(userCareerRank: int) -> str:
         if min_val <= userCareerRank <= max_val:
             return rank_name
     return None
+
+async def check_for_roles(guild: discord.Guild):
+    existing_role_names = {role.name for role in guild.roles}
+
+    existing = []
+    missing = []
+
+    for rank_name in r_dict.keys():
+        if rank_name in existing_role_names:
+            existing.append(rank_name)
+            continue
+
+        missing.append(rank_name)
+
+    return existing, missing
 
 async def create_roles(guild: discord.Guild):
     existing_role_names = {role.name for role in guild.roles}

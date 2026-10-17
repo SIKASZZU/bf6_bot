@@ -1,7 +1,7 @@
 import unittest
 import discord
-from commands import *
-import helper
+from src.commands import *
+import src.messages as messages
 
 
 class FakeGuild:
@@ -9,8 +9,9 @@ class FakeGuild:
         self.id = id
         self.name = f"Guild {id}"
 
-    def get_member(self, member_id):
+    async def fetch_member(self, member_id):
         return None  # simulate no cached members for this test
+
 class FakeMember:
     def __init__(self, id, name):
         self.id = id
@@ -23,32 +24,57 @@ class FakeGuildWithMember(FakeGuild):
         super().__init__(id)
         self._member = member
 
-    def get_member(self, member_id):
+    async def fetch_member(self, member_id):
         return self._member if member_id == self._member.id else None
 
-class TestCommandHelpMessages(unittest.TestCase):
-    def assertInEmbed(self, check_for: str, embed: discord.Embed):
-        """Custom assertion to check if check_for exists anywhere in an embed."""
-        embed_dict_str = str(embed.to_dict())
-        self.assertIn(check_for, embed_dict_str, f"'{check_for}' was not found anywhere in the Embed.")
+def _embed_text(embeds) -> str:
+    """Flattens one Embed or a list of Embeds into searchable plain text."""
+    if isinstance(embeds, discord.Embed):
+        embeds = [embeds]
 
-    def assertNotInEmbed(self, check_for: str, embed: discord.Embed):
-        """Custom assertion to check if check_for exists anywhere in an embed."""
-        embed_dict_str = str(embed.to_dict())
-        self.assertNotIn(check_for, embed_dict_str, f"'{check_for}' was not found anywhere in the Embed.")
+    parts = []
+    for e in embeds:
+        parts += [e.title or "", e.description or ""]
+        for f in e.fields:
+            parts += [f.name or "", f.value or ""]
+        if e.footer.text:
+            parts.append(e.footer.text)
+    return "\n".join(parts)
+
+class TestCommandHelpMessages(unittest.IsolatedAsyncioTestCase):
+    def assertInEmbed(self, check_for: str, embeds):
+        """Asserts check_for appears anywhere in an Embed or list of Embeds."""
+        self.assertIn(check_for, _embed_text(embeds), f"'{check_for}' was not found in the embed(s).")
+
+    def assertNotInEmbed(self, check_for: str, embeds):
+        self.assertNotIn(check_for, _embed_text(embeds), f"'{check_for}' was unexpectedly found in the embed(s).")
 
     def test_build_commands_message_includes_slash_commands(self):
-        message = helper._build_commands_message()
+        message = messages._build_commands_message()
 
         self.assertInEmbed('/commands', message)
         self.assertInEmbed('/link', message)
         self.assertInEmbed('/update', message)
 
     def test_build_commands_message_excludes_default_help_command(self):
-        message = helper._build_commands_message()
+        message = messages._build_commands_message()
         self.assertNotInEmbed('!help', message)
 
-    def test_build_linked_message_includes_linked_accounts(self):
+    def test_paginate_lines_splits_long_rows_within_embed_limits(self):
+        text = 'x' * 8500
+
+        embeds = messages._paginate_lines(
+            "Long output",
+            [text],
+            discord.Color.blue(),
+            code_block=False
+        )
+
+        self.assertGreater(len(embeds), 1)
+        self.assertEqual(''.join(embed.description for embed in embeds), text)
+        self.assertTrue(all(len(embed.description) <= 4096 for embed in embeds))
+
+    async def test_build_linked_message_includes_linked_accounts(self):
         data = {
             '123': {
                 '456': {'name': 'alice', 'platform': 'EA'}
@@ -56,17 +82,17 @@ class TestCommandHelpMessages(unittest.TestCase):
         }
 
         fake_guild = FakeGuild(id=123)
-        message = helper._build_linked_message(fake_guild, data)
+        message = await messages._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('456', message)
 
-    def test_build_linked_message_uses_member_mention_when_member_found(self):
+    async def test_build_linked_message_uses_member_mention_when_member_found(self):
         data = {'123': {'456': {'name': 'alice', 'platform': 'EA'}}}
         member = FakeMember(id=456, name='CoolPlayer')
         fake_guild = FakeGuildWithMember(id=123, member=member)
 
-        message = helper._build_linked_message(fake_guild, data)
+        message = await messages._build_linked_message(fake_guild, data)
 
         self.assertInEmbed('alice', message)
         self.assertInEmbed('CoolPlayer', message)

@@ -1,5 +1,5 @@
 import unittest
-from ranks import getRankNameFromCareerRank
+from src.ranks import getRankNameFromCareerRank
 
 # Assuming your function and r_dict are in the same scope or imported
 class TestGetRankName(unittest.TestCase):

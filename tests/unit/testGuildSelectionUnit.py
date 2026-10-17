@@ -1,7 +1,7 @@
 import unittest
-from unittest.mock import AsyncMock, PropertyMock, patch
+from unittest.mock import AsyncMock, call, patch
 
-import helper
+import src.helper as helper
 
 
 class FakeGuild:
@@ -11,7 +11,7 @@ class FakeGuild:
         self.members = members or []
 
 
-    def get_member(self, member_id):
+    async def fetch_member(self, member_id):
         for member in self.members:
             if getattr(member, "id", None) == int(member_id):
                 return member
@@ -67,12 +67,12 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         guild_a = FakeGuild(111, [FakeMember(1, "Alice")])
         guild_b = FakeGuild(222, [FakeMember(1, "Bob"), FakeMember(2, "Carol")])
 
-        with patch("helper.load_config", return_value={"222": {"channel_id": 999}, "111": {"channel_id": 999}}), \
-            patch("helper.load_data", return_value={"222": {"1": {}, "2": {}}}), \
-            patch("helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
-            patch("helper.bot.get_channel", return_value=FakeChannel(999)), \
-            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(return_value={"success": True})) as update_member:
+        with patch("src.helper.load_config", return_value={"222": {"channel_id": 999}, "111": {"channel_id": 999}}), \
+            patch("src.helper.load_data", return_value={"222": {"1": {}, "2": {}}}), \
+            patch("src.helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("src.helper.bot.get_channel", return_value=FakeChannel(999)), \
+            patch("src.helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("src.helper._update_member", new=AsyncMock(return_value={"success": True})) as update_member:
             await helper._run_guild_update(guild_b)
 
         self.assertEqual(update_member.await_count, 2)
@@ -81,11 +81,11 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
     async def test_run_guild_update_resolves_configured_channel(self):
         guild = FakeGuild(111, [FakeMember(1, "Alice")])
 
-        with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
-            patch("helper.load_data", return_value={"111": {"1": {}}}), \
-            patch("helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
-            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(return_value={
+        with patch("src.helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("src.helper.load_data", return_value={"111": {"1": {}}}), \
+            patch("src.helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("src.helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("src.helper._update_member", new=AsyncMock(return_value={
                 "success": True,
                 "value": "",
                 "assign_rank_role": {"value": "", "rank_added": None},
@@ -113,11 +113,11 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
             },
         ]
 
-        with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
-            patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
-            patch("helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
-            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(side_effect=update_results)):
+        with patch("src.helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("src.helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
+            patch("src.helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("src.helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("src.helper._update_member", new=AsyncMock(side_effect=update_results)):
             update_result = await helper._run_guild_update(guild)
         self.assertTrue(update_result["success"])
         self.assertIn("Assigned", update_result["value"])
@@ -125,12 +125,12 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
     async def test_run_guild_update_continues_after_a_member_raises(self):
         guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
 
-        with patch("helper.load_config", return_value={"111": {"channel_id": 999}}), \
-            patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
-            patch("helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
-            patch("helper.bot.get_channel", return_value=FakeChannel(999)), \
-            patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-            patch("helper._update_member", new=AsyncMock(side_effect=[Exception("boom"), {
+        with patch("src.helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("src.helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
+            patch("src.helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("src.helper.bot.get_channel", return_value=FakeChannel(999)), \
+            patch("src.helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("src.helper._update_member", new=AsyncMock(side_effect=[Exception("boom"), {
                 "success": True,
                 "value": "",
                 "assign_rank_role": {"value": "", "rank_added": None},
@@ -142,20 +142,25 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(update_result["success"])
         self.assertNotIn("boom", update_result["value"])
 
-    # async def test_run_guild_update_calls_on_progress_after_each_successful_update(self):
-    #     guild = FakeGuild(111, [FakeMember("Alice"), FakeMember("Bob")])
-    #     progress_calls = []
+    async def test_run_guild_update_reports_completed_attempts(self):
+        guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
+        on_progress = AsyncMock()
 
-    #     async def on_progress(done, total):
-    #         progress_calls.append((done, total))
+        with patch("src.helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("src.helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
+            patch("src.helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("src.helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("src.helper._update_member", new=AsyncMock(side_effect=[
+                Exception("boom"),
+                {"success": True, "value": ""},
+            ])):
+            await helper._run_guild_update(guild, on_progress=on_progress)
 
-    #     with patch("helper.load_config", return_value={}), \
-    #         patch("helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
-    #         patch("helper.aiohttp.ClientSession", return_value=DummySession()), \
-    #         patch("helper._update_member", new=AsyncMock(return_value=True)):
-    #         await helper._run_guild_update(guild, on_progress=on_progress)
+        self.assertEqual(
+            on_progress.await_args_list,
+            [call(1, 2, False), call(2, 2, True)],
+        )
 
-    #     self.assertEqual(progress_calls, [(1, 2), (2, 2)])
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,19 +2,51 @@ import json
 import aiohttp
 import time
 import math
-from discord.ext import commands, tasks
+from discord.ext import tasks
 from discord import app_commands
 import asyncio
 import datetime
 
-from globals import *
-from ranks import getRankNameFromCareerRank, get_role_dict
+import src.messages as messages
+from src.globals import *
+from src.ranks import getRankNameFromCareerRank, get_role_dict
+
+_last_command_time = 0
+
+
+class EmbedPager(discord.ui.View):
+    def __init__(self, embeds: list[discord.Embed]):
+        super().__init__(timeout=120)
+        self.embeds, self.i = embeds, 0
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i - 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.i = (self.i + 1) % len(self.embeds)
+        await interaction.response.edit_message(embed=self.embeds[self.i], view=self)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if getattr(self, "message", None):
+            await self.message.edit(view=self)
+
+class WrongChannelError(app_commands.CheckFailure):
+    def __init__(self, channel_id: int):
+        self.channel_id = channel_id
+        super().__init__(f"Command must be used in <#{channel_id}>")
+
 
 def load_data() -> dict:
     conn = get_conn()
     rows = conn.execute(f'SELECT key, value FROM {DB_DATA_FILE}').fetchall()
     conn.close()
     return {key: json.loads(value) for key, value in rows}
+
 
 def save_data(data: dict):
     if not isinstance(data, dict):
@@ -30,19 +62,10 @@ def save_data(data: dict):
     conn.commit()
     conn.close()
 
-class WrongChannelError(app_commands.CheckFailure):
-    def __init__(self, channel_id: int):
-        self.channel_id = channel_id
-        super().__init__(f"Command must be used in <#{channel_id}>")
 
-def _get_tree_commands():
-    tree_commands = getattr(bot.tree, 'get_commands', None)
-    if callable(tree_commands):
-        try:
-            return list(tree_commands())
-        except TypeError:
-            return []
-    return list(getattr(bot.tree, 'commands', []))
+def _embed_pager_kwargs(embeds: list[discord.Embed]) -> dict:
+    return {"view": EmbedPager(embeds)} if len(embeds) > 1 else {}
+
 
 def _get_guild_role_status(guild: discord.Guild) -> list:
     missing_roles: bool = False
@@ -68,6 +91,7 @@ def _get_guild_role_status(guild: discord.Guild) -> list:
     if position_below:
         return_v.append(f"Bot's role is positioned below some role(s) - move the bot's role higher.")
     return return_v
+
 
 def check_guild_requirements(guild: discord.Guild) -> dict:
     """Checks everything the bot needs to run an update in this guild.
@@ -96,133 +120,6 @@ def check_guild_requirements(guild: discord.Guild) -> dict:
 
     return {"ok": not issues, "issues": issues}
 
-def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = ''):
-    """Adds `items` (joined with ', ') to embed as one or more fields, splitting
-    across multiple fields so no single field value exceeds Discord's 1024-char
-    limit. `suffix` (e.g. a note appended after the last chunk) is appended to
-    the final chunk only, and still respects the limit."""
-    if not items:
-        return
-
-    chunks = []
-    current = ''
-    for item in items:
-        piece = item if not current else f', {item}'
-        if len(current) + len(piece) > max_len:
-            chunks.append(current)
-            current = item
-        else:
-            current += piece
-    if current:
-        chunks.append(current)
-
-    if suffix:
-        if len(chunks[-1]) + len(suffix) <= max_len:
-            chunks[-1] += suffix
-        else:
-            chunks.append(suffix.lstrip('\n'))
-
-    for i, chunk in enumerate(chunks):
-        field_name = name if i == 0 else f'\u200b'
-        embed.add_field(name=field_name, value=chunk, inline=False)
-
-def _build_commands_message():
-    embed = discord.Embed(
-        title="📋 All commands",
-        color=discord.Color.blue()
-    )
-
-    exempt_fields = []
-    restricted_fields = []
-
-    seen_names = set()
-    all_commands = list(bot.commands) + list(_get_tree_commands())
-    for cmd in sorted(all_commands, key=lambda c: c.name):
-        if getattr(cmd, 'hidden', False):
-            continue
-
-        name = getattr(cmd, 'name', None)
-        if not name or name in seen_names:
-            continue
-        seen_names.add(name)
-
-        prefix = COMMAND_PREFIX if isinstance(cmd, commands.Command) else '/'
-
-        help_text = getattr(cmd, 'help', None) or getattr(cmd, 'description', None) or "No description."
-        field_value = f"`{prefix}{name}` — {help_text}"
-
-        # if name in CHANNEL_CHECK_EXEMPT:
-        #     exempt_fields.append(field_value)
-        # else:
-        restricted_fields.append(field_value)
-
-    # if exempt_fields:
-    #     embed.add_field(name="Available in every channel", value="\n".join(exempt_fields), inline=False)
-
-    if restricted_fields:
-        #Available in only set channel
-        embed.add_field(name="", value="\n".join(restricted_fields), inline=False)
-
-    return embed
-
-def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> discord.Embed:
-
-    resolved = guild.get_member(int(member.id)) if member else None
-    member_name = resolved.name if resolved else (f"<left server> ({member.id})" if member else None)
-
-    embed = discord.Embed(
-        title="📊 Linked accounts" if not member else f"{member_name}'s linked account",
-        color=discord.Color.blue()
-    )
-
-    lines = []
-
-    if not (server_data := data.get(str(guild.id))):
-        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
-        return embed
-
-    for discord_id, entry in server_data.items():
-        if member and discord_id == str(member.id):
-            lines.append(
-                f"`{member.name}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
-            )
-            break
-
-        elif not member:
-            member_guild = guild.get_member(int(discord_id))
-            member_label = member_guild.name if member_guild else f"<left server> ({discord_id})"
-            lines.append(
-                f"`{member_label}`: {entry.get('name', 'unknown')}, level {entry.get('career_rank', 'Missing level')}, {entry.get('rank_name', 'Missing rank')}"
-            )
-
-    if not lines:
-        embed.description = "No linked accounts found for this server in the database." if not member else f"No link"
-        return embed
-
-    embed.description = "\n".join(lines)
-    return embed
-
-def _build_unlinked_message(guild: discord.Guild, data: dict) -> discord.Embed:
-    server_data = data.get(str(guild.id))
-
-    embed = discord.Embed(
-        title="👥 Unlinked members",
-        color=discord.Color.orange()
-    )
-
-    lines = []
-
-    for member in guild.members:
-        if member.bot:
-            continue
-        if str(member.id) not in server_data.keys():
-            lines.append(f"{member}")
-
-    if not lines:
-        embed.description = "All members are linked!"
-    else:
-        embed.description = "\n".join(lines)
-    return embed
 
 def _get_time_to_next_update(guild: discord.Guild):
     try:
@@ -243,47 +140,6 @@ def _get_time_to_next_update(guild: discord.Guild):
         print(f"Error calculating next update time: {e}")
         return "❌ Needs /set-channel"
 
-def _build_no_channel_warning_embed() -> discord.Embed:
-    warning_embed = discord.Embed(
-        title="⚠️ Report Channel Not Configured",
-        description="No report channel has been set for this server!",
-        color=discord.Color.red()
-    )
-    warning_embed.add_field(
-        name="How to fix:",
-        value=f"1. Go to your desired report channel\n2. Run: `{COMMAND_PREFIX}set-channel`",
-        inline=False
-    )
-    return warning_embed
-
-async def _warn_user_if_no_channel(interaction: discord.Interaction):
-    """DMs the invoking user
-    if this guild has no report channel configured yet. Called from send_interaction_message
-    so it fires after every slash command without needing to touch each command."""
-    if not interaction.guild:
-        return
-
-    if load_config().get(str(interaction.guild.id), {}).get('channel_id'):
-        return
-
-    try:
-        # await interaction.user.send(embed=_build_no_channel_warning_embed())
-        await interaction.followup.send(embed=_build_no_channel_warning_embed(), ephemeral=True)
-    except Exception as e:
-        log(interaction.guild, f"[WARNING] Failed to DM `{interaction.user.name}` about missing channel config: {e}")
-
-async def send_interaction_message(interaction: discord.Interaction, content: str, *, ephemeral: bool = False, **kwargs):
-    """Send a slash-command response safely, even after defer() or a prior response."""
-    if isinstance(content, discord.Embed):
-        kwargs['embed'] = content
-        content = None
-
-    if interaction.response.is_done():
-        await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
-    else:
-        await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
-
-    await _warn_user_if_no_channel(interaction)
 
 def get_player_entry(data: dict, guild_id: int, discord_id: int):
     """
@@ -298,21 +154,35 @@ def get_player_entry(data: dict, guild_id: int, discord_id: int):
         return {"name": entry, "platform": DEFAULT_PLATFORM}
     return entry
 
-_last_command_time = 0
-REQUEST_INTERVAL_SECONDS = 2
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    async def send_error(description: str):
+        embeds = messages._paginate_lines(
+            "❌ Command failed",
+            [description],
+            discord.Color.red(),
+            code_block=False
+        )
+        kwargs = {"view": EmbedPager(embeds)} if len(embeds) > 1 else {}
+        await messages.send_interaction_message(
+            interaction,
+            embeds[0],
+            ephemeral=True,
+            **kwargs
+        )
+
     if isinstance(error, WrongChannelError):
-        await send_interaction_message(interaction, f"❌ This command can only be used in <#{error.channel_id}>.", ephemeral=True)
+        await send_error(f"This command can only be used in <#{error.channel_id}>.")
         return
 
     if isinstance(error, app_commands.CheckFailure):
-        await send_interaction_message(interaction, f"❌ You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.", ephemeral=True)
+        await send_error("You don't have permission to use this command. Requires **Administrator** or the `/show-authorised-role` role.")
         return
 
     log(interaction.guild, f"Unhandled error in command '{interaction.command.name if interaction.command else '?'}': {error}")
-    await send_interaction_message(interaction, f"❌ An unexpected error occurred: {error}", ephemeral=True)
+    await send_error(f"An unexpected error occurred: {error}")
+
 
 async def global_interaction_check(interaction: discord.Interaction) -> bool:
     # 1. DM Guard
@@ -322,8 +192,8 @@ async def global_interaction_check(interaction: discord.Interaction) -> bool:
     # 2. Rate-limiter / Cooldown check
     global _last_command_time
     now = time.monotonic()
-    if now - _last_command_time < REQUEST_INTERVAL_SECONDS:
-        raise app_commands.CheckFailure(f"{REQUEST_INTERVAL_SECONDS} cooldown after every command!")
+    if now - _last_command_time < COMMAND_REQUEST_COOLDOWN:
+        raise app_commands.CheckFailure(f"{COMMAND_REQUEST_COOLDOWN} cooldown after every command!")
     _last_command_time = now
 
     # Load full configuration safely
@@ -355,6 +225,7 @@ async def global_interaction_check(interaction: discord.Interaction) -> bool:
 
 bot.tree.interaction_check = global_interaction_check
 
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
@@ -366,8 +237,6 @@ async def on_ready():
 
         start_guild_update_loop(guild)
 
-    # if not update_all_players.is_running():
-    #     update_all_players.start()
 
 @bot.event
 async def on_guild_join(guild):
@@ -396,6 +265,7 @@ async def on_guild_join(guild):
     log(guild, msg)
     start_guild_update_loop(guild)
 
+
 @bot.event
 async def on_guild_remove(guild):
     config = load_config()
@@ -418,6 +288,7 @@ async def on_guild_remove(guild):
     if existing:
         existing.cancel()
 
+
 @bot.event
 async def on_member_remove(member: discord.Member):
     data = load_data()
@@ -425,9 +296,10 @@ async def on_member_remove(member: discord.Member):
     if str(member.guild.id) in data and str(member.id) in data[str(member.guild.id)]:
         del data[str(member.guild.id)][str(member.id)]
         save_data(data)
-        log(member.guild, f"[LEFT] `{member.name}` ({str(member.id)}) left the guild - removed their link from data.")
+        log(member.guild, f"[LEFT] `{member.name}` left the guild - removed their link from data.")
 
-async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str):
+
+async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, nucleus_id: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
     permanent (bad name/platform) and fails immediately without retrying."""
@@ -435,10 +307,16 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
     last_error = None
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
-            API_URL = build_api_url(name)
+            API_URL = build_api_url(name, platform, nucleus_id)
             async with session.get(API_URL) as response:
+                body = await response.text()
+
                 if response.status != 200:
-                    raise Exception(f'{response}')
+                    raise Exception(
+                        f"HTTP {response.status} | "
+                        f"URL: {response.url} | "
+                        f"Body: {body}"
+                    )
 
                 stats = await response.json()
 
@@ -449,13 +327,16 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
 
         except Exception as e:
             last_error = e
-            if attempt <= API_MAX_RETRIES:
+
+            if attempt < API_MAX_RETRIES:
                 # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
+
             continue
 
     log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
     return None
+
 
 def get_rank_value_from_data(stats: dict) -> int:
     """
@@ -509,6 +390,7 @@ def get_rank_value_from_data(stats: dict) -> int:
 
     return None
 
+
 async def remove_rank_role(guild: discord.Guild, member: discord.Member, current_rank_name: str) -> dict:
     """
     Removes all obsolete rank roles from a member, keeping only their current rank role.
@@ -532,14 +414,15 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         return {"success": True, "value": f"No obsolete rank roles to remove.", "rank_removed": None}
 
     try:
-        await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
-        removed_names = ", ".join(role.mention for role in roles_to_remove)
+        await member.remove_roles(*roles_to_remove, reason="Role sync - removing obsolete roles")
+        removed_names = ", ".join(f'**{role.name}**' for role in roles_to_remove)
         # log(guild, msg := f"Removed roles: {removed_names}.")
         return {"success": True, "value": f"Removed roles: {removed_names}", "rank_removed": removed_names}
 
     except Exception as e:
         # log(guild, return_msg := f"Remove rank error: {e}")
         return {"success": False, "value": f"Remove rank error: {e}"}
+
 
 async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_name: str) -> dict:
     """
@@ -560,20 +443,48 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, return_msg := f"Bot's role is too low to assign {role.mention} - move the bot's role higher.")
+        log(guild, return_msg := f"Bot's role is too low to assign **{role.name}** - move the bot's role higher.")
         return {"success": False, "value": return_msg}
 
     try:
         return_msg = None
         if role not in member.roles:
-            await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {role.mention}")
+            await member.add_roles(role, reason="Role sync - assign role")
+            log(guild, return_msg := f"Assigned role: **{role.name}**")
 
-        return {"success": True, "value": return_msg or f'Already has rank: {role.mention}', "rank_added": rank_name if return_msg else None }
+        return {"success": True, "value": return_msg or f'Already has role: **{role.name}**', "rank_added": rank_name if return_msg else None }
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
         return {"success": False, "value": return_msg}
+
+async def _query_member_stats(name: str, platform: str, session: aiohttp.ClientSession) -> int | None:
+    for attempt in range(1, API_MAX_RETRIES + 1):
+        try:
+            API_URL = build_api_url_stats(name, platform)
+            async with session.get(API_URL) as response:
+                body = await response.text()
+
+                if response.status != 200:
+                    raise Exception(
+                        f"HTTP {response.status} | "
+                        f"URL: {response.url} | "
+                        f"Body: {body}"
+                    )
+
+                stats = await response.json()
+
+                if isinstance(stats, dict) and "errors" in stats:
+                    raise Exception(f"{stats['errors']}")
+
+                return stats.get('userId')
+
+        except Exception:
+            if attempt < API_MAX_RETRIES:
+                # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
+                await asyncio.sleep(1)
+            continue
+    return None
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession):
     """
@@ -600,6 +511,9 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     return_msg = {'success': True}
 
+    if not member:
+        return {'success': False, 'value': f"❌ Not a member: `{member}`"}
+
     if member.bot:
         # log(guild, fail_msg := f"❌ Trying to update a bot. What the helly.")
         return return_msg | {'success': False, 'value': f"❌ Trying to update a bot. What the helly."}
@@ -610,10 +524,14 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     name = entry["name"]
     platform = entry.get("platform", DEFAULT_PLATFORM)
+    
+    if not (nucleus_id := entry.get('nucleus_id')):
+        nucleus_id = await _query_member_stats(name, platform, session)
+        log(guild, message=f"nucleus_id query done for: {name}, {platform}, {nucleus_id}")
 
-    if not (stats := await fetch_player_stats(guild, session, name)):
+    if not (stats := await fetch_player_stats(guild, session, name, platform, nucleus_id)):
         # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
-        return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed. If link is correct, do not stress, API failure."}
+        return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed, API failure."}
 
     rankValue = get_rank_value_from_data(stats)
     if rankValue is None:
@@ -622,12 +540,13 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
-    # lol
     data = load_data()
     data[str(guild.id)][str(member.id)].update({
         'rank_name': concise_rank_name,
         'career_rank': rankValue
     })
+    if not (data.get('nucleus_id')):
+        data[str(guild.id)][str(member.id)].update({'nucleus_id': nucleus_id})
     save_data(data)
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
@@ -641,7 +560,8 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for `{member.name}`'}
+    return return_msg | {'value': f'✅ Success `{member.name}`'}
+
 
 def _build_update_summary(return_value: dict) -> str:
     parts = [return_value['value']]
@@ -656,6 +576,7 @@ def _build_update_summary(return_value: dict) -> str:
 
     return ', '.join(parts)
 
+
 def _has_rank_change(return_value: dict) -> bool:
     """True only if this member's update actually assigned or removed a rank
     role. Used to filter out no-op successes from the automatic update report."""
@@ -663,12 +584,13 @@ def _has_rank_change(return_value: dict) -> bool:
     remove = return_value.get('remove_rank_role') or {}
     return bool(assign.get('rank_added')) or bool(remove.get('rank_removed'))
 
+
 async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_changes: bool = False) -> dict:
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
 
-    on_progress, if given, is an async callable(updated_count, total_linked) invoked after
-    each successful member update - used for live progress reporting (e.g. editing a message).
+    on_progress, if given, is an async callable(updated_count, total_linked, is_last)
+    invoked after each member attempt - used for live progress reporting.
 
     only_report_changes, when True, drops successful-but-unchanged members from the returned
     summary so callers only see members whose rank role was actually assigned/removed. Failed
@@ -687,17 +609,14 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
     log(guild, f"[START AUTOMATIC UPDATE] Total linked: {len(linked_member_ids)} member{'' if len(linked_member_ids)==1 else 's'}.")
     async with aiohttp.ClientSession() as session:
         for idx, member_id in enumerate(linked_member_ids):
-            member = guild.get_member(int(member_id))
+            member = await guild.fetch_member(int(member_id))
 
             try:
                 return_value: dict = await _update_member(guild, member, session)
                 member_update_msg = _build_update_summary(return_value)
 
-                if on_progress:
-                    await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
-
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for `{member}`: {return_value['value']}')
+                    raise Exception(f'❌ Failed `{member if member else member_id}`: {return_value['value']}')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
@@ -706,8 +625,12 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                 log(guild, summary := f'{e}')
                 failed_player_updates_summary_list.append(f'\n{summary}')
 
-    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
-    return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}
+            if on_progress:
+                await on_progress(idx + 1, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
+
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} out of {len(linked_member_ids)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
+    return {'success': True, 'value': ' '.join(player_update_summary_list), 'failed_player_updates_summary_list': ' '.join(failed_player_updates_summary_list)}
+
 
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop | None:
     if not guild_id:
@@ -728,36 +651,36 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop 
 
         guild = bot.get_guild(guild_id)
         if guild is None:
-            log(guild, f"[ERROR] Guild {guild_id} no longer accessible, stopping its update loop.")
+            log(guild_id, f"Guild no longer accessible, stopping its update loop.")
             _loop.cancel()
             return
 
         if not (channel := bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))):
-            log(guild, 'Channel is not set.')
+            log(guild, 'Report channel is not set. Returning early.')
             return _loop
 
         return_value = await _run_guild_update(guild, only_report_changes=True)
 
-        success_msg = return_value.get('value')
-        failed_msg = return_value.get('failed_player_updates_summary_list')
+        success_msg: str = return_value.get('value')
+        failed_msg: str = return_value.get('failed_player_updates_summary_list')
 
         if not success_msg and not failed_msg:
-            log(guild, 'No updated members.')
+            log(guild, 'Automatic update completed without changes.')
             return _loop
 
         try:
-            # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
-            if failed_msg:
-                await channel.send(failed_msg)
-
-            if success_msg:
-                log(guild, channel_msg := f"{success_msg}")
-                await channel.send(channel_msg)
+            embeds = messages._paginate_lines(
+                f"⚠️ Automatic update (discord)" if success_msg and failed_msg else "❌ Automatic update (discord)" if failed_msg else f"✅ Automatic update (discord)",
+                [success_msg + failed_msg],
+                discord.Color.orange() if success_msg and failed_msg else discord.Color.red() if failed_msg else discord.Color.green(),
+                code_block=False
+            )
+            await messages._send_embed_to_channel(channel, embeds)
 
         except Exception as e:
-            log(guild, f'Error at automatic loop sending channel msg: {e}')
-
+            log(guild, f'Error at sending automatic update embed. Error: {e}')
     return _loop
+
 
 def start_guild_update_loop(guild: discord.Guild):
     """Starts (or restarts) the automatic update loop for one guild, using its configured interval."""
