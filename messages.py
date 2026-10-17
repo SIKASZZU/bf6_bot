@@ -47,11 +47,13 @@ async def send_interaction_message(interaction: discord.Interaction, content: st
 
     await _warn_user_if_no_channel(interaction)
 
+
 async def _send_chunked(channel, text: str, limit: int = 1900):
     lines = [l for l in text.split('\n') if l.strip()]
     for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
         for i in range(0, len(chunk), limit):
             await channel.send(chunk[i:i + limit])
+
 
 def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
     chunks, current = [], ''
@@ -67,31 +69,6 @@ def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
     return chunks
 
 
-def _split_message(text: str, limit: int = 1900) -> list[str]:
-    """Splits text into <=limit chunks on line boundaries (hard-slices any single oversize line)."""
-    lines = [l.rstrip(', ') for l in text.split('\n') if l.strip()]
-    pages = []
-    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
-        pages.extend(chunk[i:i + limit] for i in range(0, len(chunk), limit))
-    return pages
-
-
-def _add_chunked_field(embed: discord.Embed, name: str, items: list, *, max_len: int = 1024, suffix: str = '', sep: str = ', '):
-    if not items:
-        return
-
-    chunks = _chunk_items(items, max_len=max_len, sep=sep)
-
-    if suffix:
-        if len(chunks[-1]) + len(suffix) <= max_len:
-            chunks[-1] += suffix
-        else:
-            chunks.append(suffix.lstrip('\n'))
-
-    for i, chunk in enumerate(chunks):
-        embed.add_field(name=name if i == 0 else '\u200b', value=chunk, inline=False)
-
-
 def _get_tree_commands():
     tree_commands = getattr(bot.tree, 'get_commands', None)
     if callable(tree_commands):
@@ -100,6 +77,23 @@ def _get_tree_commands():
         except TypeError:
             return []
     return list(getattr(bot.tree, 'commands', []))
+
+
+def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n", code_block: bool = True) -> list[discord.Embed]:
+    bounded_lines = [
+        line[i:i + 4000]
+        for line in lines
+        for i in range(0, len(line), 4000)
+    ]
+    pages = _chunk_items(bounded_lines, max_len=4000, sep=sep)
+    embeds = []
+    for i, page in enumerate(pages, 1):
+        description = f"```\n{page}\n```" if code_block else page
+        e = discord.Embed(title=title, description=description, color=color)
+        if len(pages) > 1:
+            e.set_footer(text=f"Page {i}/{len(pages)} • {len(lines)} total")
+        embeds.append(e)
+    return embeds
 
 
 def _build_commands_message() -> list[discord.Embed]:
@@ -133,22 +127,6 @@ def _build_commands_message() -> list[discord.Embed]:
         code_block=False
     )
 
-
-def _paginate_lines(title: str, lines: list[str], color: discord.Color, *, sep: str = "\n", code_block: bool = True) -> list[discord.Embed]:
-    bounded_lines = [
-        line[i:i + 4000]
-        for line in lines
-        for i in range(0, len(line), 4000)
-    ]
-    pages = _chunk_items(bounded_lines, max_len=4000, sep=sep)
-    embeds = []
-    for i, page in enumerate(pages, 1):
-        description = f"```\n{page}\n```" if code_block else page
-        e = discord.Embed(title=title, description=description, color=color)
-        if len(pages) > 1:
-            e.set_footer(text=f"Page {i}/{len(pages)} • {len(lines)} total")
-        embeds.append(e)
-    return embeds
 
 async def _build_linked_message(guild: discord.Guild, data: dict, member: discord.Member = None) -> list[discord.Embed]:
     resolved = await guild.fetch_member(int(member.id)) if member else None
