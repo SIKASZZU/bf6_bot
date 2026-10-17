@@ -46,7 +46,8 @@ def build_api_url_stats(name: str, pf: str) -> str:
     params = urlencode({'name': name, 'platform': pf})
     return f"{API_URL_STATS}?{params}"
 
-file_folder = '/data' if not DEV_MODE else 'data'
+file_folder = '/data'
+
 def get_db_path():
     os.makedirs(file_folder, exist_ok=True)
     return os.path.join(file_folder, 'main.db')
