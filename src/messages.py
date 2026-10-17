@@ -207,9 +207,9 @@ async def _build_and_send_force_update_message(interaction: discord.Interaction,
     has_update_failures = bool(return_value.get('failed_player_updates_summary_list'))
 
     result_title = (
-        "❌ Update completed" if not return_value.get('success')
-        else "⚠️ Update completed" if has_update_failures
-        else "✅ Update completed"
+        "❌ Update completed (discord)" if not return_value.get('success')
+        else "⚠️ Update completed (discord)" if has_update_failures
+        else "✅ Update completed (discord)"
     )
     result_color = (
         discord.Color.red() if not return_value.get('success')

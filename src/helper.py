@@ -670,7 +670,7 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop 
 
         try:
             embeds = messages._paginate_lines(
-                f"Automatic update (discord)",
+                f"⚠️ Automatic update (discord)" if success_msg and failed_msg else "❌ Automatic update (discord)" if failed_msg else f"✅ Automatic update (discord)",
                 [success_msg + failed_msg],
                 discord.Color.orange() if success_msg and failed_msg else discord.Color.red() if failed_msg else discord.Color.green(),
                 code_block=False
