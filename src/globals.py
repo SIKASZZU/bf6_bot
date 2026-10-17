@@ -30,13 +30,16 @@ API_URL_PROFILE = 'https://api.gametools.network/bf6/profile/'
 API_URL_STATS = 'https://api.gametools.network/bf6/stats/'
 
 def build_api_url(name: str, pf: str, nucleus_id: str = None) -> str:
+    
     params = {
         'name': name,
         'platform': pf,
         'skip_battlelog': True,
         'lang': 'en-us',
     }
+
     if nucleus_id: params['nucleus_id'] = nucleus_id
+
     return f"{API_URL_PROFILE}?{urlencode(params)}"
 
 def build_api_url_stats(name: str, pf: str) -> str:
@@ -66,11 +69,11 @@ COMMAND_REQUEST_COOLDOWN: int = 2  # in seconds, how often a command can be call
 
 running_loops: dict[int, tasks.Loop] = {}
 
-def log(guild: discord.Guild, message: str):
+def log(guild: discord.Guild | int, message: str):
     def get_caller() -> str:
         try: return sys._getframe(2).f_code.co_name
         except ValueError: return "Unknown"
-    print(f'[server:{guild.name if guild else 'Unknown'}] (func:{get_caller()}) msg: {message}')
+    print(f'[server:{guild.name if isinstance(guild, discord.Guild) else guild}] (func:{get_caller()}) msg: {message}')
 
 def get_conn():
     conn = sqlite3.connect(get_db_path())

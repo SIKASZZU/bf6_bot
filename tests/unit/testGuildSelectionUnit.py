@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 import src.helper as helper
 
@@ -141,6 +141,25 @@ class TestGuildSelection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update_member.await_count, 2)
         self.assertTrue(update_result["success"])
         self.assertNotIn("boom", update_result["value"])
+
+    async def test_run_guild_update_reports_completed_attempts(self):
+        guild = FakeGuild(111, [FakeMember(1, "Alice"), FakeMember(2, "Bob")])
+        on_progress = AsyncMock()
+
+        with patch("src.helper.load_config", return_value={"111": {"channel_id": 999}}), \
+            patch("src.helper.load_data", return_value={"111": {"1": {}, "2": {}}}), \
+            patch("src.helper.check_guild_requirements", return_value={"ok": True, "issues": []}), \
+            patch("src.helper.aiohttp.ClientSession", return_value=DummySession()), \
+            patch("src.helper._update_member", new=AsyncMock(side_effect=[
+                Exception("boom"),
+                {"success": True, "value": ""},
+            ])):
+            await helper._run_guild_update(guild, on_progress=on_progress)
+
+        self.assertEqual(
+            on_progress.await_args_list,
+            [call(1, 2, False), call(2, 2, True)],
+        )
 
 
 if __name__ == "__main__":

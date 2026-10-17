@@ -531,7 +531,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     if not (stats := await fetch_player_stats(guild, session, name, platform, nucleus_id)):
         # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
-        return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed. If link is correct, do not stress, API failure."}
+        return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed, API failure."}
 
     rankValue = get_rank_value_from_data(stats)
     if rankValue is None:
@@ -560,7 +560,7 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         return return_msg | {'success': False, 'value': f'{return_msg['remove_rank_role']['value']}'}
 
     # log(guild, success_msg := )
-    return return_msg | {'value': f'✅ Update successful for `{member.name}`'}
+    return return_msg | {'value': f'✅ Success `{member.name}`'}
 
 
 def _build_update_summary(return_value: dict) -> str:
@@ -589,8 +589,8 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
     """Runs one full update pass over every member of a guild, assigning/removing rank roles.
     Resolves the guild's configured report channel itself, so callers just pass a guild.
 
-    on_progress, if given, is an async callable(updated_count, total_linked) invoked after
-    each successful member update - used for live progress reporting (e.g. editing a message).
+    on_progress, if given, is an async callable(updated_count, total_linked, is_last)
+    invoked after each member attempt - used for live progress reporting.
 
     only_report_changes, when True, drops successful-but-unchanged members from the returned
     summary so callers only see members whose rank role was actually assigned/removed. Failed
@@ -615,11 +615,8 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                 return_value: dict = await _update_member(guild, member, session)
                 member_update_msg = _build_update_summary(return_value)
 
-                if on_progress:
-                    await on_progress(len(player_update_summary_list), len(linked_member_ids), idx == (len(linked_member_ids) - 1))
-
                 if not return_value['success']:
-                    raise Exception(f'❌ Update failed for `{member if member else member_id}`: {return_value['value']}')
+                    raise Exception(f'❌ Failed `{member if member else member_id}`: {return_value['value']}')
 
                 if not only_report_changes or _has_rank_change(return_value):
                     player_update_summary_list.append(f'\n{member_update_msg}')
@@ -628,10 +625,13 @@ async def _run_guild_update(guild: discord.Guild, on_progress=None, only_report_
                 log(guild, summary := f'{e}')
                 failed_player_updates_summary_list.append(f'\n{summary}')
 
-    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
-    return {'success': True, 'value': ', '.join(player_update_summary_list), 'failed_player_updates_summary_list': ', '.join(failed_player_updates_summary_list)}
+            if on_progress:
+                await on_progress(idx + 1, len(linked_member_ids), idx == (len(linked_member_ids) - 1))
 
-# TODO: make this embed aswell like linked and shit is.
+    log(guild, f"[FINISHED AUTOMATIC UPDATE] Updated {len(player_update_summary_list)} out of {len(linked_member_ids)} member{'' if len(player_update_summary_list) == 1 else 's'}.")
+    return {'success': True, 'value': ' '.join(player_update_summary_list), 'failed_player_updates_summary_list': ' '.join(failed_player_updates_summary_list)}
+
+
 def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop | None:
     if not guild_id:
         log(bot.get_guild(guild_id), f'{guild_id} is not valid. Returning.')
@@ -651,36 +651,34 @@ def _make_guild_update_loop(guild_id: int, interval_hours: float) -> tasks.Loop 
 
         guild = bot.get_guild(guild_id)
         if guild is None:
-            log(guild, f"[ERROR] Guild {guild_id} no longer accessible, stopping its update loop.")
+            log(guild_id, f"Guild no longer accessible, stopping its update loop.")
             _loop.cancel()
             return
 
         if not (channel := bot.get_channel(load_config().get(str(guild.id), {}).get('channel_id'))):
-            log(guild, 'Channel is not set.')
+            log(guild, 'Report channel is not set. Returning early.')
             return _loop
 
         return_value = await _run_guild_update(guild, only_report_changes=True)
 
-        success_msg = return_value.get('value')
-        failed_msg = return_value.get('failed_player_updates_summary_list')
+        success_msg: str = return_value.get('value')
+        failed_msg: str = return_value.get('failed_player_updates_summary_list')
 
         if not success_msg and not failed_msg:
-            log(guild, 'No updated members.')
+            log(guild, 'Automatic update completed without changes.')
             return _loop
 
         try:
-            # try because channel.send might raise error if channel not set or some permission missing. both cases should already be covered.
-            if failed_msg:
-                log(guild, failed_msg)
-                await messages._send_chunked(channel, failed_msg)
-
-            if success_msg:
-                log(guild, channel_msg := f"{success_msg}")
-                await messages._send_chunked(channel, channel_msg)
+            embeds = messages._paginate_lines(
+                f"Automatic update (discord)",
+                [success_msg + failed_msg],
+                discord.Color.orange() if success_msg and failed_msg else discord.Color.red() if failed_msg else discord.Color.green(),
+                code_block=False
+            )
+            await messages._send_embed_to_channel(channel, embeds)
 
         except Exception as e:
-            log(guild, f'Error at automatic loop sending channel msg: {e}')
-
+            log(guild, f'Error at sending automatic update embed. Error: {e}')
     return _loop
 
 

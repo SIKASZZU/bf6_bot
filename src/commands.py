@@ -57,9 +57,11 @@ async def link(interaction: discord.Interaction, name: str, member: discord.Memb
 async def force_update(interaction: discord.Interaction, member: discord.Member = None):
     """Manually forces update on member. """
 
+    # TODO: optimze this function
+
     update_embed = discord.Embed(
-        title="🔄 Updating",
-        description=f"Updating `{member}`..." if member else "Updating all linked members...",
+        title="🔄 Update in progress",
+        description=f"Updating `{member}`..." if member else "Updating linked members...",
         color=discord.Color.blue()
     )
     await messages.send_interaction_message(interaction, content=update_embed)
@@ -74,7 +76,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
                 if not return_value['success']:
                     raise Exception(
-                        f'Update fail for `{target.name}`. {return_value['value']}')
+                        f'❌ Failed `{target.name}`. {return_value['value']}')
 
                 result_embeds = messages._paginate_lines(
                     "✅ Update complete",
@@ -93,55 +95,26 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
 
         async def report_progress(done: int, total: int, is_last: bool):
             nonlocal last_edit
+            if is_last:
+                return
+
             now = time.monotonic()
-            if not is_last and (now - last_edit) < 2:
+            if (now - last_edit) < 2:
                 return
             last_edit = now
             progress_embed = discord.Embed(
-                title="🔄 Updating",
+                title="🔄 Update in progress",
                 description=f"Updated {done}/{total} linked members...",
                 color=discord.Color.blue()
             )
             await interaction.edit_original_response(embed=progress_embed)
 
         return_value = await helper._run_guild_update(interaction.guild, on_progress=report_progress)
-
-        summary_parts = []
-        if return_value.get('value'):
-            summary_parts.append(return_value['value'])
-        if return_value.get('failed_player_updates_summary_list'):
-            summary_parts.append(
-                return_value['failed_player_updates_summary_list'])
-
-        combined = ', '.join(
-            summary_parts) if summary_parts else 'No linked members to update.'
-        log(interaction.guild, combined)
-
-        has_update_failures = bool(return_value.get(
-            'failed_player_updates_summary_list'))
-        result_title = (
-            "❌ Update failed" if not return_value.get('success')
-            else "⚠️ Update completed with errors" if has_update_failures
-            else "✅ Update complete"
-        )
-        result_color = (
-            discord.Color.red() if not return_value.get('success')
-            else discord.Color.orange() if has_update_failures
-            else discord.Color.green()
-        )
-        result_embeds = messages._paginate_lines(
-            result_title,
-            combined.splitlines() or [combined],
-            result_color,
-            code_block=False
-        )
-        await interaction.edit_original_response(
-            embed=result_embeds[0],
-            **helper._embed_pager_kwargs(result_embeds)
-        )
+        await messages._build_and_send_force_update_message(interaction, return_value)
+        return
 
     except Exception as e:
-        log(interaction.guild, fail_msg := f'❌ {e}')
+        log(interaction.guild, f'❌ {e}')
         error_embeds = messages._paginate_lines(
             "❌ Update failed",
             [str(e)],
@@ -154,7 +127,7 @@ async def force_update(interaction: discord.Interaction, member: discord.Member 
         )
 
 
-@bot.tree.command(name='check-roles', description='Check for missing / existing roles within server.')
+@bot.tree.command(name='check-roles', description='Check for missing / existing roles within server. Does not create anything!')
 async def show_missing_roles(interaction: discord.Interaction):
     await interaction.response.defer()
 

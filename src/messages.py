@@ -2,6 +2,7 @@
 import discord
 from discord.ext import commands
 
+import src.helper as helper
 from src.globals import bot, COMMAND_PREFIX
 from src.globals import load_config, log
 
@@ -34,6 +35,7 @@ async def _warn_user_if_no_channel(interaction: discord.Interaction):
     except Exception as e:
         log(interaction.guild, f"[WARNING] Failed to DM `{interaction.user.name}` about missing channel config: {e}")
 
+
 async def send_interaction_message(interaction: discord.Interaction, content: str | discord.Embed | None, *, ephemeral: bool = False, **kwargs):
     """Send a slash-command response safely, even after defer() or a prior response."""
     if isinstance(content, discord.Embed):
@@ -48,11 +50,12 @@ async def send_interaction_message(interaction: discord.Interaction, content: st
     await _warn_user_if_no_channel(interaction)
 
 
-async def _send_chunked(channel, text: str, limit: int = 1900):
-    lines = [l for l in text.split('\n') if l.strip()]
-    for chunk in _chunk_items(lines, max_len=limit, sep='\n'):
-        for i in range(0, len(chunk), limit):
-            await channel.send(chunk[i:i + limit])
+async def _send_embed_to_channel(channel: discord.TextChannel, embeds: list[discord.Embed]):
+    if not embeds:
+        return
+
+    kwargs = {"view": helper.EmbedPager(embeds)} if len(embeds) > 1 else {}
+    await channel.send(embed=embeds[0], **kwargs)
 
 
 def _chunk_items(items: list, *, max_len: int, sep: str) -> list[str]:
@@ -152,19 +155,11 @@ async def _build_linked_message(guild: discord.Guild, data: dict, member: discor
                 label = f"<left> ({discord_id})"
             rows.append((label, entry.get("name", "<Unknown>"), str(entry.get("career_rank", "<Missing>")), entry.get("rank_name", "<Missing>")))
 
-    # TODO: make this code nicer.
-    COL_WIDTHS = (12, 0, 0, 0)
+    FIRST_COL_MIN = 12
     def _format_table(rows: list[tuple]) -> list[str]:
-        # single-member mode has 3 columns, so use the trailing widths
-        widths = COL_WIDTHS[-len(rows[0]):]
-        out = []
-        for r in rows:
-            cells = []
-            for i, (cell, w) in enumerate(zip(r, widths)):
-                cells.append(cell.ljust(w))
-
-            out.append(" | ".join(cells))
-        return out
+        cells = [[str(c) for c in r] for r in rows]
+        first_w = max(FIRST_COL_MIN, max(len(r[0]) for r in cells))
+        return [" | ".join([r[0].ljust(first_w), *r[1:]]) for r in cells]
 
     lines = _format_table(rows)
 
@@ -176,7 +171,7 @@ async def _build_linked_message(guild: discord.Guild, data: dict, member: discor
 
 
 async def _build_unlinked_message(guild: discord.Guild, data: dict) -> list[discord.Embed]:
-    embed = discord.Embed(title="👥 Unlinked members", color=discord.Color.orange())
+    embed = discord.Embed(title="👥 Unlinked members (discord)", color=discord.Color.blue())
 
     server_data = data.get(str(guild.id))
 
@@ -187,13 +182,47 @@ async def _build_unlinked_message(guild: discord.Guild, data: dict) -> list[disc
             continue
 
         elif not server_data:
-            lines.append(f"{member}")
+            lines.append(f"`{member}`")
 
         elif str(member.id) not in server_data:
-            lines.append(f"{member}")
+            lines.append(f"`{member}`")
 
     if not lines:
         embed.description = "No unlinked accounts found."
         return [embed]
 
-    return _paginate_lines(embed.title, lines, embed.color)
+    return _paginate_lines(embed.title, lines, embed.color, code_block=False)
+
+
+async def _build_and_send_force_update_message(interaction: discord.Interaction, return_value):
+    summary_parts = []
+    if return_value.get('value'):
+        summary_parts.append(return_value['value'])
+    if return_value.get('failed_player_updates_summary_list'):
+        summary_parts.append(return_value['failed_player_updates_summary_list'])
+
+    combined = ' '.join(summary_parts) if summary_parts else 'No linked members to update.'
+    log(interaction.guild, combined)
+
+    has_update_failures = bool(return_value.get('failed_player_updates_summary_list'))
+
+    result_title = (
+        "❌ Update completed" if not return_value.get('success')
+        else "⚠️ Update completed" if has_update_failures
+        else "✅ Update completed"
+    )
+    result_color = (
+        discord.Color.red() if not return_value.get('success')
+        else discord.Color.orange() if has_update_failures
+        else discord.Color.green()
+    )
+    result_embeds = _paginate_lines(
+        result_title,
+        combined.splitlines() or [combined],
+        result_color,
+        code_block=False
+    )
+    await interaction.edit_original_response(
+        embed=result_embeds[0],
+        **helper._embed_pager_kwargs(result_embeds)
+    )
