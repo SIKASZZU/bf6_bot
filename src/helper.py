@@ -414,8 +414,8 @@ async def remove_rank_role(guild: discord.Guild, member: discord.Member, current
         return {"success": True, "value": f"No obsolete rank roles to remove.", "rank_removed": None}
 
     try:
-        await member.remove_roles(*roles_to_remove, reason="Rank sync - removing obsolete roles")
-        removed_names = ", ".join(role.name for role in roles_to_remove)
+        await member.remove_roles(*roles_to_remove, reason="Role sync - removing obsolete roles")
+        removed_names = ", ".join(f'**{role.name}**' for role in roles_to_remove)
         # log(guild, msg := f"Removed roles: {removed_names}.")
         return {"success": True, "value": f"Removed roles: {removed_names}", "rank_removed": removed_names}
 
@@ -443,16 +443,16 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         return {"success": False, "value": return_msg}
 
     if role.position >= guild.me.top_role.position:
-        log(guild, return_msg := f"Bot's role is too low to assign {role.name} - move the bot's role higher.")
+        log(guild, return_msg := f"Bot's role is too low to assign **{role.name}** - move the bot's role higher.")
         return {"success": False, "value": return_msg}
 
     try:
         return_msg = None
         if role not in member.roles:
-            await member.add_roles(role, reason="Rank sync - assign role")
-            log(guild, return_msg := f"Assigned rank: {role.name}")
+            await member.add_roles(role, reason="Role sync - assign role")
+            log(guild, return_msg := f"Assigned role: **{role.name}**")
 
-        return {"success": True, "value": return_msg or f'Already has rank: {role.name}', "rank_added": rank_name if return_msg else None }
+        return {"success": True, "value": return_msg or f'Already has role: **{role.name}**', "rank_added": rank_name if return_msg else None }
 
     except Exception as e:
         log(guild, return_msg := f"Assign role error: {e}")
