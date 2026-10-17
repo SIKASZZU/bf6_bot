@@ -31,11 +31,11 @@ class TestRoleRemoval(unittest.IsolatedAsyncioTestCase):
 
         result = await remove_rank_role(guild, member, "BF6 Major")
 
-        self.assertEqual(member.removed, [("BF6 Kapral", "Rank sync - removing obsolete roles")])
+        self.assertEqual(member.removed, [("BF6 Kapral", "Role sync - removing obsolete roles")])
         self.assertEqual(result, {
             "success": True,
-            "value": "Removed roles: BF6 Kapral",
-            "rank_removed": "BF6 Kapral",
+            "value": "Removed roles: **BF6 Kapral**",
+            "rank_removed": "**BF6 Kapral**",
         })
 
     async def test_remove_rank_role_resolves_string_role_names(self):
@@ -46,7 +46,7 @@ class TestRoleRemoval(unittest.IsolatedAsyncioTestCase):
 
         result = await remove_rank_role(guild, member, "BF6 Major")
 
-        self.assertEqual(member.removed, [("BF6 Kapral", "Rank sync - removing obsolete roles")])
+        self.assertEqual(member.removed, [("BF6 Kapral", "Role sync - removing obsolete roles")])
         self.assertTrue(result["success"])
 
 if __name__ == "__main__":
