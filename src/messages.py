@@ -2,8 +2,8 @@
 import discord
 from discord.ext import commands
 
-from globals import bot, COMMAND_PREFIX
-from globals import load_config, log
+from src.globals import bot, COMMAND_PREFIX
+from src.globals import load_config, log
 
 def _build_no_channel_warning_embed() -> discord.Embed:
     warning_embed = discord.Embed(

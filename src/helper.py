@@ -7,9 +7,9 @@ from discord import app_commands
 import asyncio
 import datetime
 
-import messages
-from globals import *
-from ranks import getRankNameFromCareerRank, get_role_dict
+import src.messages as messages
+from src.globals import *
+from src.ranks import getRankNameFromCareerRank, get_role_dict
 
 _last_command_time = 0
 

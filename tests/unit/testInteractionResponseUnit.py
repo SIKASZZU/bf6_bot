@@ -1,6 +1,6 @@
 import unittest
 
-import messages
+import src.messages as messages
 
 
 class FakeResponse:

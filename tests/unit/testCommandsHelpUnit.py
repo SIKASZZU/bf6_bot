@@ -1,7 +1,7 @@
 import unittest
 import discord
-from commands import *
-import messages
+from src.commands import *
+import src.messages as messages
 
 
 class FakeGuild:

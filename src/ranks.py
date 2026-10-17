@@ -1,7 +1,7 @@
 import discord
-from globals import log
-from english_ranks import EN_RANK_TIERS
-from estonian_ranks import EN_TO_ET
+from src.globals import log
+from src.english_ranks import EN_RANK_TIERS
+from src.estonian_ranks import EN_TO_ET
 
 
 def _build_r_dict() -> dict:
