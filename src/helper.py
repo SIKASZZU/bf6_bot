@@ -299,16 +299,16 @@ async def on_member_remove(member: discord.Member):
         log(member.guild, f"[LEFT] `{member.name}` left the guild - removed their link from data.")
 
 
-async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, nucleus_id: str):
+async def _query_member_profile(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, nucleus_id: str, player_id: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
     permanent (bad name/platform) and fails immediately without retrying."""
 
     last_error = None
+    PROFILE_QUERY_URL = build_api_url(name, platform, nucleus_id, player_id)
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
-            API_URL = build_api_url(name, platform, nucleus_id)
-            async with session.get(API_URL) as response:
+            async with session.get(PROFILE_QUERY_URL) as response:
                 body = await response.text()
 
                 if response.status != 200:
@@ -331,7 +331,6 @@ async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSessio
             if attempt < API_MAX_RETRIES:
                 # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(2 ** attempt)
-
             continue
 
     log(guild, f"ERROR! [Attempt {attempt}/{API_MAX_RETRIES}] {name}: {last_error}")
@@ -458,10 +457,15 @@ async def assign_rank_role(guild: discord.Guild, member: discord.Member, rank_na
         log(guild, return_msg := f"Assign role error: {e}")
         return {"success": False, "value": return_msg}
 
-async def _query_member_stats(name: str, platform: str, session: aiohttp.ClientSession) -> int | None:
+
+async def _query_member_stats(
+    name: str,
+    platform: str,
+    session: aiohttp.ClientSession
+) -> tuple[int | str | None, int | str | None, int | str | None]:
+    API_URL = build_api_url_stats(name, platform)
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
-            API_URL = build_api_url_stats(name, platform)
             async with session.get(API_URL) as response:
                 body = await response.text()
 
@@ -477,14 +481,14 @@ async def _query_member_stats(name: str, platform: str, session: aiohttp.ClientS
                 if isinstance(stats, dict) and "errors" in stats:
                     raise Exception(f"{stats['errors']}")
 
-                return stats.get('userId')
+                return stats.get('userId'), stats.get('id'), stats.get('userName')
 
         except Exception:
             if attempt < API_MAX_RETRIES:
-                # max time is 126sec with 6 attempts. S = 2(2**6-1)/(2-1)
                 await asyncio.sleep(1)
             continue
-    return None
+    return None, None, None
+
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession):
     """
@@ -522,14 +526,22 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         # log(guild, fail_msg := f"❌ Not linked. Skipping.")
         return return_msg | {'success': False, 'value': f"❌ Not linked. Skipping."}
 
-    name = entry["name"]
+    name = entry.get("name")
     platform = entry.get("platform", DEFAULT_PLATFORM)
-    
-    if not (nucleus_id := entry.get('nucleus_id')):
-        nucleus_id = await _query_member_stats(name, platform, session)
-        log(guild, message=f"nucleus_id query done for: {name}, {platform}, {nucleus_id}")
+    stored_nucleus = entry.get('nucleus_id')
+    stored_player = entry.get('player_id')
 
-    if not (stats := await fetch_player_stats(guild, session, name, platform, nucleus_id)):
+    # maybe query with id's if id's are available?
+    # TODO: query based on ids
+    # problem: https://api.gametools.network/bf6/stats/?nucleus_id=1009062519362&playerid=1004447919362
+    # that link returns null for userName?
+    nucleus_id, player_id, current_name = await _query_member_stats(name, platform, session)
+
+    nucleus_id = stored_nucleus or nucleus_id
+    player_id  = stored_player  or player_id
+    name       = current_name   or name
+
+    if not (stats := await _query_member_profile(guild, session, name, platform, nucleus_id, player_id)):
         # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
         return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed, API failure."}
 
@@ -540,13 +552,15 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
 
     concise_rank_name = getRankNameFromCareerRank(rankValue)
 
+    # save data
     data = load_data()
     data[str(guild.id)][str(member.id)].update({
         'rank_name': concise_rank_name,
-        'career_rank': rankValue
+        'career_rank': rankValue,
+        'name': name,
+        'nucleus_id': nucleus_id,
+        'player_id': player_id,
     })
-    if not (data.get('nucleus_id')):
-        data[str(guild.id)][str(member.id)].update({'nucleus_id': nucleus_id})
     save_data(data)
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)

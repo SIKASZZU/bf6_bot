@@ -29,16 +29,20 @@ bot.remove_command('help')
 API_URL_PROFILE = 'https://api.gametools.network/bf6/profile/'
 API_URL_STATS = 'https://api.gametools.network/bf6/stats/'
 
-def build_api_url(name: str, pf: str, nucleus_id: str = None) -> str:
-    
+def build_api_url(name: str, pf: str, nucleus_id: str, player_id: str) -> str:
+    # default params
     params = {
-        'name': name,
         'platform': pf,
         'skip_battlelog': True,
         'lang': 'en-us',
     }
 
     if nucleus_id: params['nucleus_id'] = nucleus_id
+    if player_id: params['playerid'] = player_id
+
+    # 2/3 have to be present, fill with name if one's missing.
+    # also covers case where nucleus and player is missing.
+    if not nucleus_id or not player_id: params['name'] = name
 
     return f"{API_URL_PROFILE}?{urlencode(params)}"
 
