@@ -24,7 +24,7 @@ class TestMemberStatsLookup(unittest.IsolatedAsyncioTestCase):
         with patch("src.helper.API_MAX_RETRIES", 1):
             result = await helper._query_member_stats("Player", "EA", FakeSession())
 
-        self.assertEqual(result, (None, None))
+        self.assertEqual(result, (None, None, None))
 
     async def test_update_uses_saved_player_id_when_nucleus_id_exists(self):
         guild = FakeGuild()
@@ -35,8 +35,8 @@ class TestMemberStatsLookup(unittest.IsolatedAsyncioTestCase):
         with patch("src.helper.bot.wait_until_ready", new=AsyncMock()), \
             patch("src.helper.get_player_entry", return_value=data["123"]["456"]), \
             patch("src.helper.load_data", return_value=data), \
-            patch("src.helper._query_member_stats", new=AsyncMock()) as query_stats, \
-            patch("src.helper.fetch_player_stats", new=AsyncMock(return_value={"profile": True})) as fetch_stats, \
+            patch("src.helper._query_member_stats", new=AsyncMock(return_value=(None, None, None))) as query_stats, \
+            patch("src.helper._query_member_profile", new=AsyncMock(return_value={"profile": True})) as fetch_stats, \
             patch("src.helper.get_rank_value_from_data", return_value=1), \
             patch("src.helper.getRankNameFromCareerRank", return_value="Major"), \
             patch("src.helper.assign_rank_role", new=AsyncMock(return_value={"success": True, "value": ""})), \
@@ -44,7 +44,7 @@ class TestMemberStatsLookup(unittest.IsolatedAsyncioTestCase):
             patch("src.helper.save_data"):
             result = await helper._update_member(guild, member, session)
 
-        query_stats.assert_not_awaited()
+        query_stats.assert_awaited_once_with("Player", "EA", session)
         fetch_stats.assert_awaited_once_with(guild, session, "Player", "EA", 789, 987)
         self.assertTrue(result["success"])
 
@@ -56,8 +56,8 @@ class TestMemberStatsLookup(unittest.IsolatedAsyncioTestCase):
         with patch("src.helper.bot.wait_until_ready", new=AsyncMock()), \
             patch("src.helper.load_data", return_value={"123": {"456": {"name": "Player"}}}), \
             patch("src.helper.get_player_entry", return_value={"name": "Player"}), \
-            patch("src.helper._query_member_stats", new=AsyncMock(return_value=(None, None))), \
-            patch("src.helper.fetch_player_stats", new=AsyncMock(return_value=None)) as fetch_stats:
+            patch("src.helper._query_member_stats", new=AsyncMock(return_value=(None, None, None))), \
+            patch("src.helper._query_member_profile", new=AsyncMock(return_value=None)) as fetch_stats:
             result = await helper._update_member(guild, member, session)
 
         fetch_stats.assert_awaited_once_with(guild, session, "Player", "EA", None, None)

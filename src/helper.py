@@ -299,7 +299,7 @@ async def on_member_remove(member: discord.Member):
         log(member.guild, f"[LEFT] `{member.name}` left the guild - removed their link from data.")
 
 
-async def fetch_player_stats(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, nucleus_id: str, player_id: str):
+async def _query_member_profile(guild: discord.Guild, session: aiohttp.ClientSession, name: str, platform: str, nucleus_id: str, player_id: str):
     """Hits the bf6 profile endpoint for a single player and returns the parsed JSON, or None.
     Retries transient failures up to API_MAX_RETRIES times. "Player not found" is treated as
     permanent (bad name/platform) and fails immediately without retrying."""
@@ -462,7 +462,7 @@ async def _query_member_stats(
     name: str,
     platform: str,
     session: aiohttp.ClientSession
-) -> tuple[int | str | None, int | str | None]:
+) -> tuple[int | str | None, int | str | None, int | str | None]:
     API_URL = build_api_url_stats(name, platform)
     for attempt in range(1, API_MAX_RETRIES + 1):
         try:
@@ -481,13 +481,13 @@ async def _query_member_stats(
                 if isinstance(stats, dict) and "errors" in stats:
                     raise Exception(f"{stats['errors']}")
 
-                return stats.get('userId'), stats.get('id')
+                return stats.get('userId'), stats.get('id'), stats.get('userName')
 
         except Exception:
             if attempt < API_MAX_RETRIES:
                 await asyncio.sleep(1)
             continue
-    return None, None
+    return None, None, None
 
 
 async def _update_member(guild: discord.Guild, member: discord.Member, session: aiohttp.ClientSession):
@@ -526,17 +526,22 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
         # log(guild, fail_msg := f"❌ Not linked. Skipping.")
         return return_msg | {'success': False, 'value': f"❌ Not linked. Skipping."}
 
-    name = entry["name"]
+    name = entry.get("name")
     platform = entry.get("platform", DEFAULT_PLATFORM)
-    nucleus_id = entry.get('nucleus_id')
-    player_id = entry.get('player_id')
+    stored_nucleus = entry.get('nucleus_id')
+    stored_player = entry.get('player_id')
 
-    if not nucleus_id or not player_id:
-        nucleus_id, queried_player_id = await _query_member_stats(name, platform, session)
-        player_id = player_id or queried_player_id
-        log(guild, message=f"nucleus_id query done for: {name}, {platform}, {nucleus_id}, {player_id}")
+    # maybe query with id's if id's are available?
+    # TODO: query based on ids
+    # problem: https://api.gametools.network/bf6/stats/?nucleus_id=1009062519362&playerid=1004447919362
+    # that link returns null for userName?
+    nucleus_id, player_id, current_name = await _query_member_stats(name, platform, session)
 
-    if not (stats := await fetch_player_stats(guild, session, name, platform, nucleus_id, player_id)):
+    nucleus_id = stored_nucleus or nucleus_id
+    player_id  = stored_player  or player_id
+    name       = current_name   or name
+
+    if not (stats := await _query_member_profile(guild, session, name, platform, nucleus_id, player_id)):
         # log(guild, fail_msg := f"⚠️ Data fetch failed. If link is correct, do not stress, API failure.")
         return return_msg | {'success': False, 'value': f"⚠️ Data fetch failed, API failure."}
 
@@ -551,13 +556,11 @@ async def _update_member(guild: discord.Guild, member: discord.Member, session: 
     data = load_data()
     data[str(guild.id)][str(member.id)].update({
         'rank_name': concise_rank_name,
-        'career_rank': rankValue
+        'career_rank': rankValue,
+        'name': name,
+        'nucleus_id': nucleus_id,
+        'player_id': player_id,
     })
-    member_entry = data[str(guild.id)][str(member.id)]
-    if nucleus_id and not member_entry.get('nucleus_id'):
-        member_entry['nucleus_id'] = nucleus_id
-    if player_id and not member_entry.get('player_id'):
-        member_entry['player_id'] = player_id
     save_data(data)
 
     return_msg['assign_rank_role'] = await assign_rank_role(guild, member, concise_rank_name)
